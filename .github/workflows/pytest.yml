@@ -1,0 +1,13 @@
+name: pytest
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+
+jobs:
+  pytest:
+    uses: pnx-si/geonature/.github/workflows/gn-module-pytest.yml@master

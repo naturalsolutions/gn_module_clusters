@@ -1,0 +1,5 @@
+MODULE_CODE = "CLUSTERS"
+MODULE_LABEL = "Foyers"
+MODULE_PICTO = "fa-bullseye"
+ALEMBIC_BRANCH = "clusters"
+SCHEMA = "gn_clusters"

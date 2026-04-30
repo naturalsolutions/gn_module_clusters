@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[project]
+name = "gn_module_clusters"
+description = "Module GeoNature de gestion des foyers d’envahissement."
+requires-python = ">=3.11"
+dependencies = ["geonature >= 2.17"]
+dynamic = ["version"]
+maintainers = [
+  { name = "Natural Solutions", email = "geonature@natural-solutions.eu" },
+]
+
+[project.urls]
+Repository = "https://github.com/naturalsolutions/gn_module_clusters/"
+
+[project.entry-points.gn_module]
+code = "gn_module_clusters:MODULE_CODE"
+label = "gn_module_clusters:MODULE_LABEL"
+picto = "gn_module_clusters:MODULE_PICTO"
+blueprint = "gn_module_clusters.blueprint:blueprint"
+migrations = "gn_module_clusters:migrations"
+alembic_branch = "gn_module_clusters:ALEMBIC_BRANCH"
+config_schema = "gn_module_clusters.config_schema:ClustersConfigSchema"
+
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py313"]
+
+[tool.coverage.run]
+source = ["backend/gn_module_clusters/"]
+omit = ["*/tests/*", "*/migrations/*"]
