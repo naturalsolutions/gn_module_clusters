@@ -10,4 +10,7 @@ on:
 
 jobs:
   pytest:
-    uses: pnx-si/geonature/.github/workflows/gn-module-pytest.yml@master
+    uses: bouttier/geonature/.github/workflows/gn-module-pytest.yml@feat/workflow-geonature-repo
+    with:
+      geonature_repo: bouttier/geonature
+      geonature_ref: bump-geo
