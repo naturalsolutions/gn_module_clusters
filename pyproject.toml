@@ -8,7 +8,7 @@ where = ["backend"]
 [project]
 name = "gn_module_clusters"
 description = "Module GeoNature de gestion des foyers d’envahissement."
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = ["geonature >= 2.17"]
 dynamic = ["version"]
 maintainers = [
@@ -30,7 +30,7 @@ config_schema = "gn_module_clusters.config_schema:ClustersConfigSchema"
 
 [tool.black]
 line-length = 100
-target-version = ["py311", "py313"]
+target-version = ["py39", "py311", "py313"]
 
 [tool.coverage.run]
 source = ["backend/gn_module_clusters/"]
