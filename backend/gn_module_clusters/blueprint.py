@@ -23,7 +23,9 @@ blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__)
 def dump(*args, as_geojson=None, **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    data = ClusterSchema(only=["manager"], as_geojson=as_geojson).dump(*args, **kwargs)
+    data = ClusterSchema(
+        only=["manager", "taxon", "status", "yearly_state"], as_geojson=as_geojson
+    ).dump(*args, **kwargs)
     if as_geojson:
         return geojsonify(data)
     else:

@@ -25,6 +25,7 @@ class Cluster(db.Model):
     name = db.Column(db.Unicode, unique=True, nullable=False)
     notes = db.Column(db.UnicodeText)
     cd_nom = db.Column(db.Integer, db.ForeignKey(Taxref.cd_nom), nullable=False)
+    taxon = db.relationship(Taxref)
     taxref = db.relationship(Taxref)
     geom_4326 = deferred(db.Column(Geometry("GEOMETRY", srid=4326), nullable=False))
     geom = deferred(db.Column(Geometry("GEOMETRY"), nullable=False))

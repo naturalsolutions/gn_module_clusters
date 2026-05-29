@@ -9,6 +9,7 @@ from pypnusershub.schemas import UserSchema
 from utils_flask_sqla.schema import SmartRelationshipsMixin
 from utils_flask_sqla_geo.schema import GeoAlchemyAutoSchema, GeoModelConverter
 from pypnnomenclature.utils import NomenclaturesConverter
+from apptax.taxonomie.schemas import TaxrefSchema
 
 from gn_module_clusters.models import Cluster
 
@@ -30,6 +31,7 @@ class ClusterSchema(SmartRelationshipsMixin, GeoAlchemyAutoSchema):
     id = auto_field(dump_only=True)  # should not be modified by update route!
     centroid = auto_field(dump_only=True)  # computed from geom
     manager = Nested(UserSchema, dump_only=True)
+    taxon = Nested(TaxrefSchema, dump_only=True)
 
     @validates_schema
     def check_geom(self, data, **kwargs):
