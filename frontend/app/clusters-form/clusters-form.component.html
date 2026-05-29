@@ -1,0 +1,22 @@
+<div class="container-fluid">
+  <div
+    class="clusters-form-content"
+    [ngStyle]="{ 'min-height.px': cardContentHeight }"
+  >
+    <div class="row">
+      <div
+        class="col-xl-6 col-lg-7 col-sm-6"
+        [ngStyle]="{ 'height.px': cardContentHeight }"
+      >
+        <pnx-clusters-form-map></pnx-clusters-form-map>
+      </div>
+      <div
+        class="col-xl-6 col-lg-5 col-sm-6"
+        style="overflow-y: scroll"
+        [ngStyle]="{ 'height.px': cardContentHeight }"
+      >
+        <pnx-clusters-form-detail></pnx-clusters-form-detail>
+      </div>
+    </div>
+  </div>
+</div>

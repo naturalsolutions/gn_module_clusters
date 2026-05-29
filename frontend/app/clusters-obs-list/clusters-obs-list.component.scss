@@ -1,0 +1,44 @@
+:host ::ng-deep .datatable-body-row.active .datatable-row-group {
+  background-color: rgb(117, 227, 118) !important;
+}
+
+:host ::ng-deep .datatable-body-row {
+  height: 30px !important;
+}
+
+:host ::ng-deep .datatable-header-cell {
+  padding-left: 15px !important;
+}
+
+:host ::ng-deep .datatable-body-cell {
+  font-size: 12px !important;
+  padding-bottom: 15px !important;
+  padding-top: 8px !important;
+  padding-left: 15px !important;
+}
+
+:host ::ng-deep .datatable-body-cell i {
+  font-size: 12px;
+}
+
+:host ::ng-deep .datatable-body {
+  overflow-x: scroll;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+ngx-datatable {
+  box-shadow: none !important;
+}
+
+.actions-btns {
+  display: flex;
+  margin: 5px 15px 15px 15px;
+  justify-content: flex-end;
+}
+
+button[disabled] {
+  cursor: not-allowed;
+}

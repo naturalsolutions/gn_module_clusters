@@ -1,0 +1,102 @@
+<ngx-datatable
+  #table
+  class="material striped margin-top-xs table-size"
+  [rows]="clusters"
+  [columnMode]="'force'"
+  [headerHeight]="50"
+  [footerHeight]="50"
+  [count]="clusters.length"
+  [limit]="10"
+  [rowClass]="getRowClass"
+  [selected]="selectedRows"
+  [selectionType]="'single'"
+  [reorderable]="true"
+  (activate)="onRowClick($event)"
+>
+  <ngx-datatable-column
+    [maxWidth]="40"
+    [sortable]="false"
+    name=""
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      <a
+        class="link-dark"
+        (click)="onEdit(row); $event.stopPropagation()"
+        matTooltip="Modifier le foyer"
+      >
+        <i
+          class="fa fa-pencil"
+          aria-hidden="true"
+        ></i>
+      </a>
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Nom"
+    prop="name"
+    [sortable]="true"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      {{ row.name }}
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Taxon"
+    [sortable]="true"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      <a
+        class="link-primary"
+        (click)="onTaxonClick(row); $event.stopPropagation()"
+        matTooltip="Filtrer les observations par ce taxon"
+      >
+        {{ getTaxonName(row) }}
+      </a>
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Observations"
+    prop="observations_count"
+    [sortable]="true"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      <i
+        class="fa"
+        [class.fa-eye]="isClusterInFilter(row.id)"
+        [class.fa-eye-slash]="!isClusterInFilter(row.id)"
+        (click)="toggleClusterFilter(row.id); $event.stopPropagation()"
+        style="cursor: pointer; margin-right: 4px;"
+        matTooltip="Afficher/masquer les observations de ce foyer"
+      ></i>
+      {{ row.observations_count }}
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Date de création"
+    prop="created_on"
+    [sortable]="true"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      {{ getDate(row.created_on) }}
+    </ng-template>
+  </ngx-datatable-column>
+</ngx-datatable>

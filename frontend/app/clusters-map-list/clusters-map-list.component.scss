@@ -1,0 +1,99 @@
+.is-loading {
+  display: none;
+}
+
+.wrapper {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+  background-color: white;
+}
+
+@media (min-width: 1000px) {
+  #sidebar {
+    width: 250px;
+  }
+  #sidebar.active {
+    margin-left: -250px;
+  }
+}
+@media (min-width: 1200px) {
+  #sidebar {
+    width: 300px;
+  }
+  #sidebar.active {
+    margin-left: -300px;
+  }
+}
+@media (min-width: 1500px) {
+  #sidebar {
+    width: 350px;
+  }
+  #sidebar.active {
+    margin-left: -350px;
+  }
+}
+
+.btn-toogle-sidenav {
+  z-index: 10000;
+  position: absolute;
+  top: 50%;
+  padding: 0 5px;
+  height: 50px;
+  border-bottom-left-radius: 0;
+  border-top-left-radius: 0;
+  background-color: white;
+}
+.btn-toogle-sidenav:focus {
+  box-shadow:
+    4px 5px 8px 0 rgba(0, 0, 0, 0.2),
+    0 6px 20px 0 rgba(0, 0, 0, 0.19) !important;
+}
+#sidebar.active .btn-toogle-sidenav {
+  left: 0;
+}
+
+.page-content {
+  width: 100%;
+}
+
+a[data-toggle='collapse'] {
+  position: relative;
+}
+
+.dropdown-toggle::after {
+  display: block;
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+}
+
+:host ::ng-deep .clusters-orphan-filter {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+:host ::ng-deep .clusters-orphan-filter .custom-control-label {
+  margin: 0.2rem;
+}
+:host ::ng-deep .clusters-orphan-filter .custom-control-label::before {
+  top: 0.05rem;
+}
+:host ::ng-deep .clusters-orphan-filter .custom-control-label::after {
+  top: calc(0.05rem + 2px);
+}
+:host ::ng-deep .clusters-orphan-filter .custom-control-input:indeterminate ~ .custom-control-label::before {
+  background-color: #ffc107;
+  border-color: #ffc107;
+}
+:host ::ng-deep .clusters-orphan-filter .custom-control-input:indeterminate ~ .custom-control-label::after {
+  background-color: #fff;
+  transform: translateX(0.5rem);
+}
+
+.actions-btns {
+  display: flex;
+  margin: 5px 15px 15px 15px;
+  justify-content: flex-end;
+}
+
+
