@@ -4,6 +4,7 @@ from geoalchemy2 import Geometry
 import sqlalchemy as sa
 from sqlalchemy import Computed, event
 from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import deferred, relationship
 
 from geonature.utils.env import db
@@ -42,6 +43,21 @@ class Cluster(db.Model):
     manager_id = db.Column(db.Integer, db.ForeignKey(User.id_role), nullable=False)
     manager = db.relationship(User)
     created_on = db.Column(sa.DateTime, server_default=sa.func.now())
+
+    @hybrid_property
+    def observations_count(self):
+        return db.session.scalar(
+            sa.select(sa.func.count()).where(ObservarationCluster.id_cluster == self.id)
+        )
+
+    @observations_count.expression
+    def observations_count(cls):
+        return (
+            sa.select(sa.func.count())
+            .where(ObservarationCluster.id_cluster == cls.id)
+            .correlate(cls.__table__)
+            .scalar_subquery()
+        )
 
     def has_instance_permission(self, scope, *, user=None):
         if user is None:

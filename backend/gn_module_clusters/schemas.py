@@ -32,6 +32,7 @@ class ClusterSchema(SmartRelationshipsMixin, GeoAlchemyAutoSchema):
     centroid = auto_field(dump_only=True)  # computed from geom
     manager = Nested(UserSchema, dump_only=True)
     taxref = Nested(TaxrefSchema, dump_only=True)
+    observations_count = fields.Integer(dump_only=True)
 
     @validates_schema
     def check_geom(self, data, **kwargs):

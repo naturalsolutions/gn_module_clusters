@@ -21,6 +21,27 @@ from gn_module_clusters.schemas import ClusterSchema
 blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__)
 
 
+@blueprint.record_once
+def init(state):
+    import sqlalchemy as sa
+
+    from geonature.core.gn_synthese.models import VSyntheseForWebApp
+    from geonature.core.gn_synthese.synthese_config import MANDATORY_COLUMNS
+
+    MANDATORY_COLUMNS += [
+        "id_nomenclature_valid_status",
+        "validator",
+        "validation_comment",
+        "cluster_id",
+    ]
+
+    VSyntheseForWebApp.cluster_id = sa.orm.column_property(
+        sa.select(ObservarationCluster.id_cluster)
+        .where(ObservarationCluster.id_synthese == VSyntheseForWebApp.id_synthese)
+        .scalar_subquery()
+    )
+
+
 def check_cluster_overlap(cluster):
     """Raise Conflict if another cluster with the same cd_nom overlaps the cluster geometry."""
     where_clauses = [
@@ -36,9 +57,10 @@ def check_cluster_overlap(cluster):
 def dump(*args, as_geojson=None, **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    data = ClusterSchema(
-        only=["manager", "taxon", "status", "yearly_state"], as_geojson=as_geojson
-    ).dump(*args, **kwargs)
+    only = ["manager", "taxref", "status", "yearly_state"]
+    if request.args.get("observations_count"):
+        only += ["+observations_count"]
+    data = ClusterSchema(only=only, as_geojson=as_geojson).dump(*args, **kwargs)
     if as_geojson:
         return geojsonify(data)
     else:
