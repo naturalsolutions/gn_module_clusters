@@ -104,7 +104,7 @@ class ObservarationCluster(db.Model):
     observation = db.relationship(Synthese, back_populates="associated_cluster")
     id_cluster = db.Column(
         db.Integer,
-        db.ForeignKey(Cluster.id),
+        db.ForeignKey(Cluster.id, ondelete="CASCADE"),
         primary_key=True,
     )
     cluster = db.relationship(Cluster, back_populates="associated_observations")

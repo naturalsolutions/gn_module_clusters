@@ -185,7 +185,7 @@ def upgrade():
         sa.Column(
             "id_cluster",
             sa.Integer,
-            sa.ForeignKey(clusters.c.id),
+            sa.ForeignKey(clusters.c.id, ondelete="CASCADE"),
             primary_key=True,
         ),
         sa.UniqueConstraint("id_synthese", name="unique_id_synthese"),
