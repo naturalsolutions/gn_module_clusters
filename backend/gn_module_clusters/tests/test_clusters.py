@@ -6,6 +6,7 @@ from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 import sqlalchemy as sa
 import pytest
 from flask import current_app, url_for
+from shapely.geometry import Point
 from werkzeug.exceptions import BadRequest, Forbidden, Unauthorized, Conflict
 
 from geonature.utils.env import db
@@ -19,6 +20,13 @@ from gn_module_clusters.models import Cluster, ObservarationCluster
 @pytest.fixture()
 def per_dataset_uuid_check(monkeypatch):
     monkeypatch.setitem(current_app.config[MODULE_CODE], "SOURCES", [1])
+
+
+# Helper to be sure to never have conflict with overlapping clusters
+def get_unused_cd_nom():
+    return db.session.scalar(
+        sa.select(Taxref.cd_nom).where(~Taxref.cd_nom.in_(sa.select(Cluster.cd_nom)))
+    )
 
 
 @pytest.mark.usefixtures("client_class", "temporary_transaction")
@@ -152,7 +160,7 @@ class TestClusters:
         assert r.mimetype == "application/geo+json"
         assert r.json["type"] == "Feature"
 
-    def test_create_cluster_permissions(self, users):
+    def test_create_cluster_permissions(self, users, remove_existing_clusters):
         url = url_for("clusters.create_cluster")
         area = db.session.execute(
             sa.select(LAreas).where(
@@ -160,17 +168,15 @@ class TestClusters:
                 LAreas.area_code == "26",
             )
         ).scalar_one()
-        taxon = db.session.scalars(
-            sa.select(Taxref).where(Taxref.lb_nom == "Canis lupus").limit(1)
-        ).first()
-        data = {"geom": to_shape(area.geom).wkt, "cd_nom": taxon.cd_nom}
 
-        r = self.client.post(url, json={"name": "test 1", **data})
+        data = {"geom_4326": to_shape(area.geom_4326).wkt}
+
+        r = self.client.post(url, json={"name": "test 1", "cd_nom": get_unused_cd_nom(), **data})
         assert r.status_code == Unauthorized.code, r.data
 
         # When we create a cluster, the default manager is the logged user
         set_logged_user(self.client, users["self_user"])
-        r = self.client.post(url, json={"name": "test 2", **data})
+        r = self.client.post(url, json={"name": "test 2", "cd_nom": get_unused_cd_nom(), **data})
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
             sa.select(Cluster).where(Cluster.id == r.json["id"])
@@ -179,7 +185,13 @@ class TestClusters:
 
         # We expect the logged user able to create cluster with himself as manager
         r = self.client.post(
-            url, json={"name": "test 3", "manager_id": users["self_user"].id_role, **data}
+            url,
+            json={
+                "name": "test 3",
+                "manager_id": users["self_user"].id_role,
+                "cd_nom": get_unused_cd_nom(),
+                **data,
+            },
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -193,6 +205,7 @@ class TestClusters:
             json={
                 "name": "test 4",
                 "manager_id": users["associate_user"].id_role,
+                "cd_nom": get_unused_cd_nom(),
                 **data,
             },
         )
@@ -201,7 +214,13 @@ class TestClusters:
         # With a C=2, we can create a cluster for someone with the same organisme
         set_logged_user(self.client, users["associate_user"])
         r = self.client.post(
-            url, json={"name": "test 4", "manager_id": users["self_user"].id_role, **data}
+            url,
+            json={
+                "name": "test 4",
+                "manager_id": users["self_user"].id_role,
+                "cd_nom": get_unused_cd_nom(),
+                **data,
+            },
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -212,7 +231,13 @@ class TestClusters:
         # But not for someone with a different organisme
         set_logged_user(self.client, users["stranger_user"])
         r = self.client.post(
-            url, json={"name": "test 5", "manager_id": users["self_user"].id_role, **data}
+            url,
+            json={
+                "name": "test 5",
+                "manager_id": users["self_user"].id_role,
+                "cd_nom": get_unused_cd_nom(),
+                **data,
+            },
         )
         assert r.status_code == Forbidden.code, r.data
 
@@ -220,7 +245,12 @@ class TestClusters:
         set_logged_user(self.client, users["admin_user"])
         r = self.client.post(
             url,
-            json={"name": "test 5", "manager_id": users["stranger_user"].id_role, **data},
+            json={
+                "name": "test 5",
+                "manager_id": users["stranger_user"].id_role,
+                "cd_nom": get_unused_cd_nom(),
+                **data,
+            },
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -228,24 +258,31 @@ class TestClusters:
         ).scalar_one()
         assert cluster.manager.id_role == users["stranger_user"].id_role
 
-    def test_create_cluster_4326(self, users):
+    def test_create_cluster_geojson(self, users):
+        import json
+
+        from shapely.geometry import mapping
+
         area = db.session.execute(
             sa.select(LAreas).where(
                 LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
                 LAreas.area_code == "26",
             )
         ).scalar_one()
-        taxon = db.session.scalars(
-            sa.select(Taxref).where(Taxref.lb_nom == "Canis lupus").limit(1)
-        ).first()
         set_logged_user(self.client, users["self_user"])
         r = self.client.post(
             url_for(endpoint="clusters.create_cluster"),
-            json={
-                "name": "test 1",
-                "geom_4326": to_shape(element=area.geom_4326).wkt,
-                "cd_nom": taxon.cd_nom,
-            },
+            data=json.dumps(
+                {
+                    "type": "Feature",
+                    "geometry": mapping(to_shape(element=area.geom_4326)),
+                    "properties": {
+                        "name": "test 1",
+                        "cd_nom": get_unused_cd_nom(),
+                    },
+                }
+            ),
+            content_type="application/geo+json",
         )
         assert r.status_code == 200, r.data
 
@@ -258,9 +295,6 @@ class TestClusters:
                 LAreas.area_code == "26",
             )
         ).scalar_one()
-        taxon = db.session.scalars(
-            sa.select(Taxref).where(Taxref.lb_nom == "Canis lupus").limit(1)
-        ).first()
 
         status = db.session.scalars(
             sa.select(TNomenclatures).where(
@@ -281,25 +315,78 @@ class TestClusters:
             url_for(endpoint="clusters.create_cluster"),
             json={
                 "name": "test 1",
-                "cd_nom": taxon.cd_nom,
-                "geom": to_shape(element=area.geom).wkt,
+                "cd_nom": get_unused_cd_nom(),
+                "geom_4326": to_shape(element=area.geom_4326).wkt,
                 "status_id": status.id_nomenclature,
                 "yearly_state_id": yearly_state.id_nomenclature,
             },
         )
         assert r.status_code == 200, r.data
 
+        # Ensure that if we use nomenclature of the wrong type, we get a bad request
         r = self.client.post(
             url_for(endpoint="clusters.create_cluster"),
             json={
                 "name": "test 1",
-                "cd_nom": taxon.cd_nom,
+                "cd_nom": get_unused_cd_nom(),
                 "geom": to_shape(element=area.geom).wkt,
-                "status_id": yearly_state.id_nomenclature,
                 "yearly_state_id": status.id_nomenclature,
             },
         )
         assert r.status_code == BadRequest.code, r.data
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "test 1",
+                "cd_nom": get_unused_cd_nom(),
+                "geom": to_shape(element=area.geom).wkt,
+                "status_id": yearly_state.id_nomenclature,
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_create_cluster_overlap(self, users, clusters):
+        set_logged_user(self.client, users["user"])
+
+        area = db.session.execute(
+            sa.select(LAreas).where(
+                LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
+                LAreas.area_code == "59",
+            )
+        ).scalar_one()
+
+        # Same cd_nom and overlapping geom → Conflict
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "overlap test 1",
+                "cd_nom": clusters["c1"].cd_nom,
+                "geom_4326": to_shape(clusters["c1"].geom_4326).wkt,
+            },
+        )
+        assert r.status_code == Conflict.code, r.data
+
+        # Different cd_nom and overlapping geom → success
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "overlap test 2",
+                "cd_nom": get_unused_cd_nom(),
+                "geom_4326": to_shape(clusters["c1"].geom_4326).wkt,
+            },
+        )
+        assert r.status_code == 200, r.data
+
+        # Same cd_nom and non-overlapping geom → success
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "overlap test 3",
+                "cd_nom": clusters["c1"].cd_nom,
+                "geom_4326": to_shape(area.geom_4326).wkt,
+            },
+        )
+        assert r.status_code == 200, r.data
 
     def test_update_cluster_permissions(self, users, clusters):
         def url(cluster):
@@ -390,6 +477,43 @@ class TestClusters:
             sa.select(Cluster).where(Cluster.id == clusters["c1"].id)
         ).scalar_one()
         assert cluster.manager.id_role == users["self_user"].id_role
+
+    def test_update_cluster_overlap(self, users, clusters):
+        set_logged_user(self.client, users["self_user"])
+
+        # Verify fixtures are appropriate for this test purpose
+        assert clusters["c1"].cd_nom == clusters["c2"].cd_nom
+        assert clusters["c1"].cd_nom != clusters["c5"].cd_nom
+        assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
+
+        # Update without geom or cd_nom change → success
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"name": "updated name"},
+        )
+        assert r.status_code == 200, r.data
+
+        # update with same geom as c2 (same cd_nom) → Conflict
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"geom_4326": to_shape(clusters["c2"].geom_4326).wkt},
+        )
+        assert r.status_code == Conflict.code, r.data
+
+        # update with same geom as c5 (different cd_nom) → success
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"geom_4326": to_shape(clusters["c5"].geom_4326).wkt},
+        )
+        assert r.status_code == 200, r.data
+        assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
+
+        # update with same cd_nom as c5 (same geom) → Conflict
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": clusters["c5"].cd_nom},
+        )
+        assert r.status_code == Conflict.code, r.data
 
     def test_update_cluster_nomenclatures(self, users, clusters):
         def url(cluster):

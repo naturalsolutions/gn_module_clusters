@@ -12,4 +12,4 @@ from geonature.tests.fixtures import (
     synthese_data,
 )
 from pypnusershub.tests.fixtures import teardown_logout_user
-from .fixtures import clusters
+from .fixtures import clusters, remove_existing_clusters

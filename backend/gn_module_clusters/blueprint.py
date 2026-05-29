@@ -1,5 +1,6 @@
 from datetime import datetime
 from flask import Blueprint, request, g, jsonify
+from geoalchemy2.shape import from_shape
 from geonature.core.gn_permissions.tools import get_permissions
 from geonature.core.gn_synthese.models import Synthese
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
@@ -18,6 +19,18 @@ from gn_module_clusters.models import Cluster, ObservarationCluster
 from gn_module_clusters.schemas import ClusterSchema
 
 blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__)
+
+
+def check_cluster_overlap(cluster):
+    """Raise Conflict if another cluster with the same cd_nom overlaps the cluster geometry."""
+    where_clauses = [
+        Cluster.cd_nom == cluster.cd_nom,
+        sa.func.ST_Intersects(Cluster.geom_4326, cluster.geom_4326),
+    ]
+    if cluster.id is not None:  # update case
+        where_clauses += [Cluster.id != cluster.id]
+    if db.session.scalar(sa.select(sa.exists().where(*where_clauses))):
+        raise Conflict("A cluster with the same cd_nom already overlaps this geometry")
 
 
 def dump(*args, as_geojson=None, **kwargs):
@@ -39,7 +52,6 @@ rw_fields = [
     "name",
     "notes",
     "cd_nom",
-    "geom",
     "geom_4326",
 ]
 
@@ -59,16 +71,8 @@ def list_clusters(scope):
 @check_cruved_scope(action="C", module_code=MODULE_CODE, get_scope=True)
 def create_cluster(scope):
     as_geojson = request.content_type == "application/geo+json"
-    create_schema = ClusterSchema(
-        only=rw_fields, partial=["manager_id", "geom", "geom_4326"], as_geojson=as_geojson
-    )
+    create_schema = ClusterSchema(only=rw_fields, partial=["manager_id"], as_geojson=as_geojson)
     cluster = create_schema.load(request.json, session=db.session)
-
-    # When geoms are loaded from json, we do not known the srid, assume the srid of the column
-    if cluster.geom is not None and cluster.geom.srid < 0:
-        cluster.geom.srid = get_local_srid(db.session)
-    if cluster.geom_4326 is not None and cluster.geom_4326.srid < 0:
-        cluster.geom_4326.srid = 4326
 
     # manager
     if cluster.manager_id is None:
@@ -103,6 +107,11 @@ def create_cluster(scope):
             raise BadRequest(
                 f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
             )
+
+    # When geoms are loaded from json, the srid is not necessary set
+    if cluster.geom_4326.srid < 0:
+        cluster.geom_4326.srid = 4326
+    check_cluster_overlap(cluster)
 
     db.session.add(cluster)
     db.session.commit()
@@ -142,11 +151,11 @@ def update_cluster(id_cluster, scope):
     with db.session.no_autoflush:
         update_schema.load(request.json, instance=cluster)
 
-        # When geoms are loaded from json, we do not known the srid, assume the srid of the column
-        if cluster.geom is not None and cluster.geom.srid < 0:
-            cluster.geom.srid = get_local_srid(db.session)
-        if cluster.geom_4326 is not None and cluster.geom_4326.srid < 0:
+        # When geoms are loaded from json, the srid is not necessary set
+        if cluster.geom_4326.srid < 0:
             cluster.geom_4326.srid = 4326
+
+        check_cluster_overlap(cluster)
 
         # refresh manager relationship in case FKs have been changed
         db.session.expire(cluster, ["manager", "status", "yearly_state"])
@@ -168,6 +177,7 @@ def update_cluster(id_cluster, scope):
                 f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
             )
 
+        # FIXME: checks all obs are still in cluster taxref tree?
         # FIXME: checks geometry (cluster geom contains all cluster obs geoms)?
 
     db.session.commit()

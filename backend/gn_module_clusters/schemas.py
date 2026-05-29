@@ -1,6 +1,6 @@
 from geonature.utils.env import db
 
-from marshmallow import ValidationError, validates_schema
+from marshmallow import ValidationError, fields, validates_schema
 from marshmallow_sqlalchemy import auto_field
 from marshmallow_sqlalchemy.fields import Nested
 
@@ -31,7 +31,7 @@ class ClusterSchema(SmartRelationshipsMixin, GeoAlchemyAutoSchema):
     id = auto_field(dump_only=True)  # should not be modified by update route!
     centroid = auto_field(dump_only=True)  # computed from geom
     manager = Nested(UserSchema, dump_only=True)
-    taxon = Nested(TaxrefSchema, dump_only=True)
+    taxref = Nested(TaxrefSchema, dump_only=True)
 
     @validates_schema
     def check_geom(self, data, **kwargs):
