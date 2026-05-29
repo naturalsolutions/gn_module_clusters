@@ -1,6 +1,8 @@
 from geoalchemy2.shape import to_shape
 from geonature.core.gn_synthese.models import Synthese
 from gn_module_clusters import MODULE_CODE
+from numpy.random import f
+from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 import sqlalchemy as sa
 import pytest
 from flask import current_app, url_for
@@ -177,7 +179,7 @@ class TestClusters:
 
         # We expect the logged user able to create cluster with himself as manager
         r = self.client.post(
-            url, json={"name": "test 3", "manager": {"id_role": users["self_user"].id_role}, **data}
+            url, json={"name": "test 3", "manager_id": users["self_user"].id_role, **data}
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -190,7 +192,7 @@ class TestClusters:
             url,
             json={
                 "name": "test 4",
-                "manager": {"id_role": users["associate_user"].id_role},
+                "manager_id": users["associate_user"].id_role,
                 **data,
             },
         )
@@ -199,7 +201,7 @@ class TestClusters:
         # With a C=2, we can create a cluster for someone with the same organisme
         set_logged_user(self.client, users["associate_user"])
         r = self.client.post(
-            url, json={"name": "test 4", "manager": {"id_role": users["self_user"].id_role}, **data}
+            url, json={"name": "test 4", "manager_id": users["self_user"].id_role, **data}
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -210,7 +212,7 @@ class TestClusters:
         # But not for someone with a different organisme
         set_logged_user(self.client, users["stranger_user"])
         r = self.client.post(
-            url, json={"name": "test 5", "manager": {"id_role": users["self_user"].id_role}, **data}
+            url, json={"name": "test 5", "manager_id": users["self_user"].id_role, **data}
         )
         assert r.status_code == Forbidden.code, r.data
 
@@ -218,7 +220,7 @@ class TestClusters:
         set_logged_user(self.client, users["admin_user"])
         r = self.client.post(
             url,
-            json={"name": "test 5", "manager": {"id_role": users["stranger_user"].id_role}, **data},
+            json={"name": "test 5", "manager_id": users["stranger_user"].id_role, **data},
         )
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
@@ -246,6 +248,58 @@ class TestClusters:
             },
         )
         assert r.status_code == 200, r.data
+
+    def test_create_cluster_nomenclatures(self, users):
+        set_logged_user(self.client, users["self_user"])
+
+        area = db.session.execute(
+            sa.select(LAreas).where(
+                LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
+                LAreas.area_code == "26",
+            )
+        ).scalar_one()
+        taxon = db.session.scalars(
+            sa.select(Taxref).where(Taxref.lb_nom == "Canis lupus").limit(1)
+        ).first()
+
+        status = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_STATUS"
+                )
+            )
+        ).first()
+        yearly_state = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_YEARLY_STATE"
+                )
+            )
+        ).first()
+
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "test 1",
+                "cd_nom": taxon.cd_nom,
+                "geom": to_shape(element=area.geom).wkt,
+                "status_id": status.id_nomenclature,
+                "yearly_state_id": yearly_state.id_nomenclature,
+            },
+        )
+        assert r.status_code == 200, r.data
+
+        r = self.client.post(
+            url_for(endpoint="clusters.create_cluster"),
+            json={
+                "name": "test 1",
+                "cd_nom": taxon.cd_nom,
+                "geom": to_shape(element=area.geom).wkt,
+                "status_id": yearly_state.id_nomenclature,
+                "yearly_state_id": status.id_nomenclature,
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
 
     def test_update_cluster_permissions(self, users, clusters):
         def url(cluster):
@@ -310,23 +364,19 @@ class TestClusters:
         assert cluster.manager.id_role == users["self_user"].id_role
 
         set_logged_user(self.client, users["self_user"])
-        r = self.client.post(
-            url("c1"), json={"manager": {"id_role": users["associate_user"].id_role}}
-        )
+        r = self.client.post(url("c1"), json={"manager_id": users["associate_user"].id_role})
         assert r.status_code == Forbidden.code, r.data
         db.session.refresh(cluster)
         assert cluster.manager.id_role == users["self_user"].id_role
 
         # c1 was belonging to self_user and now belogns to associate_user
         set_logged_user(self.client, users["associate_user"])
-        r = self.client.post(
-            url("c1"), json={"manager": {"id_role": users["associate_user"].id_role}}
-        )
+        r = self.client.post(url("c1"), json={"manager_id": users["associate_user"].id_role})
         assert r.status_code == 200, r.data
         db.session.refresh(cluster)
         assert cluster.manager.id_role == users["associate_user"].id_role
         # and back to self_user
-        r = self.client.post(url("c1"), json={"manager": {"id_role": users["self_user"].id_role}})
+        r = self.client.post(url("c1"), json={"manager_id": users["self_user"].id_role})
         assert r.status_code == 200, r.data
         cluster = db.session.execute(
             sa.select(Cluster).where(Cluster.id == clusters["c1"].id)
@@ -334,14 +384,61 @@ class TestClusters:
         assert cluster.manager.id_role == users["self_user"].id_role
 
         # but not to stranger_user
-        r = self.client.post(
-            url("c1"), json={"manager": {"id_role": users["stranger_user"].id_role}}
-        )
+        r = self.client.post(url("c1"), json={"manager_id": users["stranger_user"].id_role})
         assert r.status_code == Forbidden.code, r.data
         cluster = db.session.execute(
             sa.select(Cluster).where(Cluster.id == clusters["c1"].id)
         ).scalar_one()
         assert cluster.manager.id_role == users["self_user"].id_role
+
+    def test_update_cluster_nomenclatures(self, users, clusters):
+        def url(cluster):
+            return url_for("clusters.update_cluster", id_cluster=clusters[cluster].id)
+
+        set_logged_user(self.client, users["self_user"])
+
+        area = db.session.execute(
+            sa.select(LAreas).where(
+                LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
+                LAreas.area_code == "26",
+            )
+        ).scalar_one()
+        taxon = db.session.scalars(
+            sa.select(Taxref).where(Taxref.lb_nom == "Canis lupus").limit(1)
+        ).first()
+
+        status = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_STATUS"
+                )
+            )
+        ).first()
+        yearly_state = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_YEARLY_STATE"
+                )
+            )
+        ).first()
+
+        r = self.client.post(
+            url("c1"),
+            json={
+                "status_id": status.id_nomenclature,
+                "yearly_state_id": yearly_state.id_nomenclature,
+            },
+        )
+        assert r.status_code == 200, r.data
+
+        r = self.client.post(
+            url("c1"),
+            json={
+                "status_id": yearly_state.id_nomenclature,
+                "yearly_state_id": status.id_nomenclature,
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
 
     def test_delete_cluster_permissions(self, users, clusters):
         def url(cluster):

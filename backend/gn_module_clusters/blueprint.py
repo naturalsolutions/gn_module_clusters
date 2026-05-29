@@ -2,6 +2,9 @@ from datetime import datetime
 from flask import Blueprint, request, g, jsonify
 from geonature.core.gn_permissions.tools import get_permissions
 from geonature.core.gn_synthese.models import Synthese
+from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
+from pypnusershub.db.models import User
+from ref_geo.utils import get_local_srid
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer
 from utils_flask_sqla_geo.utils import geojsonify
@@ -27,9 +30,16 @@ def dump(*args, as_geojson=None, **kwargs):
         return jsonify(data)
 
 
-rw_fields = ["manager.id_role", "+geom", "+geom_4326"]
-create_schema = ClusterSchema(only=rw_fields, partial=["geom", "geom_4326"])
-update_schema = ClusterSchema(only=rw_fields, partial=True)
+rw_fields = [
+    "manager_id",
+    "status_id",
+    "yearly_state_id",
+    "name",
+    "notes",
+    "cd_nom",
+    "geom",
+    "geom_4326",
+]
 
 
 @blueprint.route(rule="/", methods=["GET"])
@@ -46,12 +56,52 @@ def list_clusters(scope):
 @blueprint.route(rule="/", methods=["POST"])
 @check_cruved_scope(action="C", module_code=MODULE_CODE, get_scope=True)
 def create_cluster(scope):
-    # Using manager.id for loading the manager, allowing to check its organisme
+    as_geojson = request.content_type == "application/geo+json"
+    create_schema = ClusterSchema(
+        only=rw_fields, partial=["manager_id", "geom", "geom_4326"], as_geojson=as_geojson
+    )
     cluster = create_schema.load(request.json, session=db.session)
-    if cluster.manager is None:
+
+    # When geoms are loaded from json, we do not known the srid, assume the srid of the column
+    if cluster.geom is not None and cluster.geom.srid < 0:
+        cluster.geom.srid = get_local_srid(db.session)
+    if cluster.geom_4326 is not None and cluster.geom_4326.srid < 0:
+        cluster.geom_4326.srid = 4326
+
+    # manager
+    if cluster.manager_id is None:
         cluster.manager = g.current_user
-    if not cluster.has_instance_permission(scope):
-        raise Forbidden
+    else:
+        cluster.manager = db.get_or_404(User, cluster.manager_id)
+        if not cluster.has_instance_permission(scope):
+            raise Forbidden
+
+    # nomenclatures
+    if cluster.status_id is not None:
+        cluster.status = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.id_nomenclature == cluster.status_id,
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_STATUS"
+                ),
+            )
+        ).one_or_none()
+        if not cluster.status:
+            raise BadRequest(f"status nomenclature with id {cluster.status_id} not found")
+    if cluster.yearly_state_id is not None:
+        cluster.yearly_state = db.session.scalars(
+            sa.select(TNomenclatures).where(
+                TNomenclatures.id_nomenclature == cluster.yearly_state_id,
+                TNomenclatures.nomenclature_type.has(
+                    BibNomenclaturesTypes.mnemonique == "CLUSTER_YEARLY_STATE"
+                ),
+            )
+        ).one_or_none()
+        if not cluster.yearly_state:
+            raise BadRequest(
+                f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
+            )
+
     db.session.add(cluster)
     db.session.commit()
     return dump(cluster)
@@ -82,12 +132,42 @@ def update_cluster(id_cluster, scope):
         raise NotFound
     if not cluster.has_instance_permission(scope):
         raise Forbidden
+
+    as_geojson = request.content_type == "application/geo+json"
+    update_schema = ClusterSchema(only=rw_fields, partial=True, as_geojson=as_geojson)
+
     # Avoid possible commits before the end of validation checks
     with db.session.no_autoflush:
         update_schema.load(request.json, instance=cluster)
-        if not cluster.has_instance_permission(scope):  # the manager may have been modified
+
+        # When geoms are loaded from json, we do not known the srid, assume the srid of the column
+        if cluster.geom is not None and cluster.geom.srid < 0:
+            cluster.geom.srid = get_local_srid(db.session)
+        if cluster.geom_4326 is not None and cluster.geom_4326.srid < 0:
+            cluster.geom_4326.srid = 4326
+
+        # refresh manager relationship in case FKs have been changed
+        db.session.expire(cluster, ["manager", "status", "yearly_state"])
+
+        # re-check permission in case the manager have been changed
+        if not cluster.has_instance_permission(scope):
             raise Forbidden
+
+        # re-check nomenclatures exists and are of proper type
+        if cluster.status_id and (
+            not cluster.status or cluster.status.nomenclature_type.mnemonique != "CLUSTER_STATUS"
+        ):
+            raise BadRequest(f"yearly state nomenclature with id {cluster.status_id} not found")
+        if cluster.yearly_state_id and (
+            not cluster.yearly_state
+            or cluster.yearly_state.nomenclature_type.mnemonique != "CLUSTER_YEARLY_STATE"
+        ):
+            raise BadRequest(
+                f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
+            )
+
         # FIXME: checks geometry (cluster geom contains all cluster obs geoms)?
+
     db.session.commit()
     return dump(cluster)
 

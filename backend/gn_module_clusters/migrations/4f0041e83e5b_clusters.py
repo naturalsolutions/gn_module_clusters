@@ -28,39 +28,109 @@ def upgrade():
     logger.info(f"Create module schema {SCHEMA}")
     op.execute(f"CREATE SCHEMA {SCHEMA}")
 
+    logger.info("Create nomenclature types for clusters")
+    nomenclature_type = sa.Table(
+        "bib_nomenclatures_types", metadata, schema="ref_nomenclatures", autoload_with=conn
+    )
+    id_clusters_status = conn.execute(
+        sa.insert(nomenclature_type)
+        .values(
+            mnemonique="CLUSTER_STATUS",
+            label_default="Statut du foyer",
+            label_fr="Statut du foyer",
+            definition_default="Statut du foyer de contamination",
+            definition_fr="Statut du foyer de contamination",
+            source="CLUSTERS",
+            statut="Validé",
+        )
+        .returning(nomenclature_type.c.id_type)
+    ).scalar_one()
+    id_clusters_yearly_state = conn.execute(
+        sa.insert(nomenclature_type)
+        .values(
+            mnemonique="CLUSTER_YEARLY_STATE",
+            label_default="État de gestion annuel",
+            label_fr="État de gestion annuel",
+            definition_default="État de gestion annuel du foyer",
+            definition_fr="État de gestion annuel du foyer",
+            source="CLUSTERS",
+            statut="Validé",
+        )
+        .returning(nomenclature_type.c.id_type)
+    ).scalar_one()
+
+    logger.info("Insert nomenclature values for clusters")
+    nomenclature = sa.Table(
+        "t_nomenclatures", metadata, schema="ref_nomenclatures", autoload_with=conn
+    )
+    op.execute(
+        sa.insert(nomenclature).values(
+            [
+                {
+                    "id_type": id_clusters_status,
+                    "cd_nomenclature": "ACTIF",
+                    "mnemonique": "ACTIF",
+                    "label_default": "Actif",
+                    "label_fr": "Actif",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+                {
+                    "id_type": id_clusters_status,
+                    "cd_nomenclature": "INACTIF",
+                    "mnemonique": "INACTIF",
+                    "label_default": "Inactif",
+                    "label_fr": "Inactif",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+                {
+                    "id_type": id_clusters_status,
+                    "cd_nomenclature": "ERADICATED",
+                    "mnemonique": "ERADICATED",
+                    "label_default": "Éradiqué",
+                    "label_fr": "Éradiqué",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+                {
+                    "id_type": id_clusters_yearly_state,
+                    "cd_nomenclature": "TODO",
+                    "mnemonique": "TODO",
+                    "label_default": "À repasser",
+                    "label_fr": "À repasser",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+                {
+                    "id_type": id_clusters_yearly_state,
+                    "cd_nomenclature": "NOT_HANDLE",
+                    "mnemonique": "NOT_HANDLE",
+                    "label_default": "Non géré",
+                    "label_fr": "Non géré",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+                {
+                    "id_type": id_clusters_yearly_state,
+                    "cd_nomenclature": "HANDLE",
+                    "mnemonique": "HANDLE",
+                    "label_default": "Géré",
+                    "label_fr": "Géré",
+                    "source": "CLUSTERS",
+                    "statut": "Validé",
+                    "active": True,
+                },
+            ]
+        )
+    )
+
     logger.info("Create module tables")
-    clusters_status = op.create_table(
-        "bib_clusters_status",
-        sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("code", sa.Unicode, unique=True, nullable=False),
-        sa.Column("label", sa.Unicode),
-        sa.Column("description", sa.Unicode),
-        schema=SCHEMA,
-    )
-    op.bulk_insert(
-        clusters_status,
-        [
-            {"code": "ACTIF", "label": "Actif"},
-            {"code": "INACTIF", "label": "Inactif"},
-            {"code": "ERADICATED", "label": "Éradiqué"},
-        ],
-    )
-    yearly_state = op.create_table(
-        "bib_clusters_yearly_state",
-        sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("code", sa.Unicode, unique=True, nullable=False),
-        sa.Column("label", sa.Unicode),
-        sa.Column("description", sa.Unicode),
-        schema=SCHEMA,
-    )
-    op.bulk_insert(
-        yearly_state,
-        [
-            {"code": "TODO", "label": "À repasser"},
-            {"code": "NOT_HANDLE", "label": "Non géré"},
-            {"code": "HANDLE", "label": "Géré"},
-        ],
-    )
     clusters = op.create_table(
         "t_clusters",
         sa.Column("id", sa.Integer, primary_key=True),
@@ -74,11 +144,15 @@ def upgrade():
             Geometry("POINT"),
             sa.Computed("ST_Centroid(geom)", persisted=True),
         ),
-        sa.Column("status_id", sa.Integer, sa.ForeignKey(clusters_status.c.id)),
+        sa.Column(
+            "status_id",
+            sa.Integer,
+            sa.ForeignKey("ref_nomenclatures.t_nomenclatures.id_nomenclature"),
+        ),
         sa.Column(
             "yearly_state_id",
             sa.Integer,
-            sa.ForeignKey(yearly_state.c.id),
+            sa.ForeignKey("ref_nomenclatures.t_nomenclatures.id_nomenclature"),
         ),
         sa.Column(
             "manager_id",
@@ -88,6 +162,15 @@ def upgrade():
         ),
         sa.Column("created_on", sa.DateTime, server_default=sa.func.now(), nullable=False),
         schema=SCHEMA,
+    )
+    logger.info("Add nomenclature type check constraints")
+    op.execute(
+        f"ALTER TABLE {SCHEMA}.t_clusters ADD CONSTRAINT check_clusters_status CHECK "
+        "(ref_nomenclatures.check_nomenclature_type_by_mnemonique(status_id, 'CLUSTER_STATUS')) NOT VALID"
+    )
+    op.execute(
+        f"ALTER TABLE {SCHEMA}.t_clusters ADD CONSTRAINT check_clusters_yearly_state CHECK "
+        "(ref_nomenclatures.check_nomenclature_type_by_mnemonique(yearly_state_id, 'CLUSTER_YEARLY_STATE')) NOT VALID"
     )
     op.create_table(
         "cor_synthese_cluster",
@@ -266,8 +349,16 @@ def downgrade():
     logger.info("Remove module tables")
     op.drop_table(table_name="cor_synthese_cluster", schema=SCHEMA)
     op.drop_table(table_name="t_clusters", schema=SCHEMA)
-    op.drop_table(table_name="bib_clusters_yearly_state", schema=SCHEMA)
-    op.drop_table(table_name="bib_clusters_status", schema=SCHEMA)
+
+    logger.info("Remove nomenclature types")
+    nomenclature = sa.Table(
+        "t_nomenclatures", metadata, schema="ref_nomenclatures", autoload_with=conn
+    )
+    nomenclature_type = sa.Table(
+        "bib_nomenclatures_types", metadata, schema="ref_nomenclatures", autoload_with=conn
+    )
+    op.execute(sa.delete(nomenclature).where(nomenclature.c.source == "CLUSTERS"))
+    op.execute(sa.delete(nomenclature_type).where(nomenclature_type.c.source == "CLUSTERS"))
 
     logger.info(f"Remove module schema {SCHEMA}")
     op.execute(f"DROP SCHEMA {SCHEMA}")

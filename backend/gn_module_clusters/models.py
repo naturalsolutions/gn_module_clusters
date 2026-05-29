@@ -14,30 +14,7 @@ from apptax.taxonomie.models import Taxref
 from ref_geo.utils import get_local_srid
 
 from gn_module_clusters import SCHEMA
-
-
-class ClusterStatus(db.Model):
-    __tablename__ = "bib_clusters_status"
-    __table_args__ = {"schema": SCHEMA}
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.Unicode, unique=True, nullable=False)
-    label = db.Column(db.Unicode)
-    description = db.Column(db.Unicode)
-
-    def __str__(self):
-        return self.label or self.code
-
-
-class ClusterYearlyState(db.Model):
-    __tablename__ = "bib_clusters_yearly_state"
-    __table_args__ = {"schema": SCHEMA}
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.Unicode, unique=True, nullable=False)
-    label = db.Column(db.Unicode)
-    description = db.Column(db.Unicode)
-
-    def __str__(self):
-        return self.label or self.code
+from pypnnomenclature.models import TNomenclatures
 
 
 class Cluster(db.Model):
@@ -54,10 +31,14 @@ class Cluster(db.Model):
     centroid = deferred(
         db.Column(Geometry("POINT"), Computed("ST_Centroid(geom)", persisted=True), nullable=False)
     )
-    status_id = db.Column(db.Integer, db.ForeignKey(ClusterStatus.id))
-    status = db.relationship(ClusterStatus)
-    yearly_state_id = db.Column(db.Integer, db.ForeignKey(ClusterYearlyState.id))
-    yearly_state = db.relationship(ClusterYearlyState)
+    status_id = db.Column(
+        db.Integer, db.ForeignKey("ref_nomenclatures.t_nomenclatures.id_nomenclature")
+    )
+    status = db.relationship(TNomenclatures, foreign_keys=[status_id], uselist=False)
+    yearly_state_id = db.Column(
+        db.Integer, db.ForeignKey("ref_nomenclatures.t_nomenclatures.id_nomenclature")
+    )
+    yearly_state = db.relationship(TNomenclatures, foreign_keys=[yearly_state_id], uselist=False)
     manager_id = db.Column(db.Integer, db.ForeignKey(User.id_role), nullable=False)
     manager = db.relationship(User)
     created_on = db.Column(sa.DateTime, server_default=sa.func.now())
