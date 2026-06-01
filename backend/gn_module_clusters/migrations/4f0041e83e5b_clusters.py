@@ -248,93 +248,10 @@ def upgrade():
         )
     )
 
-    logger.info("Create module notifications")
-    # Catégories de notifications
-    notification_category = sa.Table(
-        "bib_notifications_categories",
-        metadata,
-        schema="gn_notifications",
-        autoload_with=conn,
-    )
-    op.execute(
-        sa.insert(notification_category).values(
-            [
-                {
-                    "code": "CLUSTERS-CREATED",
-                    "label": "Création d'un foyer de contamination",
-                    "description": "Se déclenche lors de la création d'un nouveau foyer de contamination.",
-                },
-                {
-                    "code": "CLUSTERS-VALIDATED",
-                    "label": "Validation d'un foyer de contamination",
-                    "description": "Se déclenche lors de la validation d'un foyer de contamination.",
-                },
-            ]
-        )
-    )
-
-    # Modèles de notifications
-    notification_template = sa.Table(
-        "bib_notifications_templates",
-        metadata,
-        schema="gn_notifications",
-        autoload_with=conn,
-    )
-    op.execute(
-        sa.insert(notification_template).values(
-            [
-                {
-                    "code_category": "CLUSTERS-CREATED",
-                    "code_method": "DB",
-                    "content": "Nouveau foyer de contamination créé",
-                },
-                {
-                    "code_category": "CLUSTERS-CREATED",
-                    "code_method": "EMAIL",
-                    "content": "Nouveau foyer de contamination créé",
-                },
-                {
-                    "code_category": "CLUSTERS-VALIDATED",
-                    "code_method": "DB",
-                    "content": "Votre foyer de contamination n°{{ cluster.id_cluster }} a été validé.",
-                },
-                {
-                    "code_category": "CLUSTERS-VALIDATED",
-                    "code_method": "EMAIL",
-                    "content": "Votre foyer de contamination n°{{ cluster.id_cluster }} a été validé.",
-                },
-            ]
-        )
-    )
-
 
 def downgrade():
     conn = op.get_bind()
     metadata = sa.MetaData(bind=conn)
-
-    logger.info("Remove module notifications")
-    notification_template = sa.Table(
-        "bib_notifications_templates",
-        metadata,
-        schema="gn_notifications",
-        autoload_with=conn,
-    )
-    op.execute(
-        sa.delete(notification_template).where(
-            notification_template.c.code_category.in_(["CLUSTERS-CREATED", "CLUSTERS-VALIDATED"])
-        )
-    )
-    notification_category = sa.Table(
-        "bib_notifications_categories",
-        metadata,
-        schema="gn_notifications",
-        autoload_with=conn,
-    )
-    op.execute(
-        sa.delete(notification_category).where(
-            notification_category.c.code.in_(["CLUSTERS-CREATED", "CLUSTERS-VALIDATED"])
-        )
-    )
 
     logger.info("Remove module permissions")
     module = sa.Table("t_modules", metadata, schema="gn_commons", autoload_with=conn)
