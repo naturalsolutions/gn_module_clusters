@@ -26,6 +26,17 @@ export class ClustersDataService {
     });
   }
 
+  listClustersByCdNoms(cdNoms: number[]): Observable<GeoJSON.FeatureCollection> {
+    let params = new HttpParams().set('observations_count', '1');
+    if (cdNoms.length > 0) {
+      params = params.set('accepted_cd_nom', cdNoms.join(','));
+    }
+    return this._http.get<GeoJSON.FeatureCollection>(`${this.CLUSTERS_API}/`, {
+      headers: GEOJSON_ACCEPT,
+      params,
+    });
+  }
+
   getCluster(id: number): Observable<GeoJSON.Feature> {
     return this._http.get<GeoJSON.Feature>(`${this.CLUSTERS_API}/${id}`, {
       headers: GEOJSON_ACCEPT,

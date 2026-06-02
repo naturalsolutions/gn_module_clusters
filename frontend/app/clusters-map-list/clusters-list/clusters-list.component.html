@@ -4,9 +4,6 @@
   [rows]="clusters"
   [columnMode]="'force'"
   [headerHeight]="50"
-  [footerHeight]="50"
-  [count]="clusters.length"
-  [limit]="10"
   [rowClass]="getRowClass"
   [selected]="selectedRows"
   [selectionType]="'single'"
@@ -14,7 +11,9 @@
   (activate)="onRowClick($event)"
 >
   <ngx-datatable-column
-    [maxWidth]="40"
+    [width]="80"
+    [maxWidth]="80"
+    [flexGrow]="0"
     [sortable]="false"
     name=""
   >
@@ -23,12 +22,32 @@
       ngx-datatable-cell-template
     >
       <a
+        class="link-dark mr-1"
+        (click)="onInfo(row); $event.stopPropagation()"
+        matTooltip="Informations du foyer"
+      >
+        <i
+          class="fa fa-info-circle"
+          aria-hidden="true"
+        ></i>
+      </a>
+      <a
         class="link-dark"
         (click)="onEdit(row); $event.stopPropagation()"
         matTooltip="Modifier le foyer"
       >
         <i
           class="fa fa-pencil"
+          aria-hidden="true"
+        ></i>
+      </a>
+      <a
+        class="link-dark ml-1"
+        (click)="onDelete(row); $event.stopPropagation()"
+        matTooltip="Supprimer le foyer"
+      >
+        <i
+          class="fa fa-trash"
           aria-hidden="true"
         ></i>
       </a>
@@ -59,7 +78,7 @@
       <a
         class="link-primary"
         (click)="onTaxonClick(row); $event.stopPropagation()"
-        matTooltip="Filtrer les observations par ce taxon"
+        matTooltip="Filtrer avec ce taxon"
       >
         {{ getTaxonName(row) }}
       </a>
@@ -84,6 +103,19 @@
         matTooltip="Afficher/masquer les observations de ce foyer"
       ></i>
       {{ row.observations_count }}
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Gestionnaire"
+    prop="manager.nom_complet"
+    [sortable]="true"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      {{ row.manager?.nom_complet || (row.manager?.prenom_role + ' ' + row.manager?.nom_role) || '-' }}
     </ng-template>
   </ngx-datatable-column>
 

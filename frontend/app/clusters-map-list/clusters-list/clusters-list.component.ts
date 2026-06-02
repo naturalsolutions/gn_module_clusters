@@ -1,8 +1,6 @@
 import { Component, OnInit, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
-import { Router } from '@angular/router';
 import { DatatableComponent } from '@swimlane/ngx-datatable';
 import { Cluster, getTaxonName } from '../../models';
-import { ModuleService } from '@geonature/services/module.service';
 
 @Component({
   selector: 'pnx-clusters-list',
@@ -17,12 +15,12 @@ export class ClustersListComponent implements OnInit, OnChanges {
   @Output() clusterFilterChange = new EventEmitter<null | number[]>();
   @Output() clusterClick = new EventEmitter<Cluster>();
   @Output() taxonClick = new EventEmitter<Cluster>();
+  @Output() editCluster = new EventEmitter<Cluster>();
+  @Output() infoCluster = new EventEmitter<Cluster>();
+  @Output() deleteCluster = new EventEmitter<Cluster>();
   @ViewChild('table', { static: true }) table: DatatableComponent;
 
-  constructor(
-    private router: Router,
-    private moduleService: ModuleService
-  ) {}
+  constructor() {}
 
   ngOnInit() {}
 
@@ -41,8 +39,15 @@ export class ClustersListComponent implements OnInit, OnChanges {
   }
 
   onEdit(cluster: Cluster) {
-    const modulePath = this.moduleService.currentModule.module_path;
-    this.router.navigate([`${modulePath}/form`, cluster.id]);
+    this.editCluster.emit(cluster);
+  }
+
+  onInfo(cluster: Cluster) {
+    this.infoCluster.emit(cluster);
+  }
+
+  onDelete(cluster: Cluster) {
+    this.deleteCluster.emit(cluster);
   }
 
   onRowClick(event: any) {

@@ -1,7 +1,9 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, ChangeDetectorRef, ViewChild } from '@angular/core';
-import { UntypedFormControl } from '@angular/forms';
+import { Component, OnInit, AfterViewInit, OnDestroy, ChangeDetectorRef, ViewChild, HostListener, TemplateRef } from '@angular/core';
+import { NgbTypeaheadSelectItemEvent } from '@ng-bootstrap/ng-bootstrap';
+import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, forkJoin } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
+import { filter } from 'rxjs/operators';
 
 import * as cloneDeep from 'lodash/cloneDeep';
 import * as L from 'leaflet';
@@ -9,17 +11,20 @@ import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
 
 import { ConfigService } from '@geonature/services/config.service';
+import { ModuleService } from '@geonature/services/module.service';
 import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthese-data.service';
 import { MapListService } from '@geonature_common/map-list/map-list.service';
 import { MapService } from '@geonature_common/map/map.service';
 import { SyntheseFormService } from '@geonature_common/form/synthese-form/synthese-form.service';
-import { SyntheseCarteComponent } from '../synthese-results/synthese-carte/synthese-carte.component';
+import { ClustersObsMapComponent } from './clusters-obs-map/clusters-obs-map.component';
 
 import { SyntheseStoreService } from '../services/store.service';
-import { SyntheseModalDownloadComponent } from '../synthese-results/synthese-list/modal-download/modal-download.component';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { ClustersAssociateModalComponent } from '../clusters-associate-modal/clusters-associate-modal.component';
-import { Cluster, getTaxonName } from '../models';
+import { ClustersInfoModalComponent } from '../clusters-info-modal/clusters-info-modal.component';
+import { DataFormService } from '@geonature_common/form/data-form.service';
+import { Cluster, getTaxonName, getManagerName } from '../models';
+import { Taxon } from '@geonature_common/form/taxonomy/taxonomy.component';
 
 @Component({
   selector: 'pnx-clusters-map-list',
@@ -33,18 +38,166 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public isSearchBarReduced = true;
   public activeTab: string = 'observations';
   public clusters: Cluster[] = [];
+  public allClusters: Cluster[] = [];
   public selectedClusterId: number | null = null;
   public selectedObsIds: Set<number> = new Set();
   public selectedObsRowId: number | null = null;
   public clusterFilter: null | number[] = [];
   public includeOrphanObs = true;
   public showClusters = true;
-  @ViewChild(SyntheseCarteComponent) syntheseCarte: SyntheseCarteComponent;
+  public addObsModulePath: string | null = null;
+  public selectedObsForActions: number[] = [];
+  public checkedObsSet: Set<number> = new Set();
+  public clusterCreationMode = false;
+  public editingCluster: Cluster | null = null;
+  public creationForm: UntypedFormGroup;
+  public waiting = false;
+  private pendingAssociate: { clusterId: number; obsIds: number[] } | null = null;
+  private drawnGeometry: GeoJSON.Geometry | null = null;
+  private pendingObsIdsForCreation: number[] | null = null;
+  @ViewChild(ClustersObsMapComponent) obsMap: ClustersObsMapComponent;
+  @ViewChild('confirmDeleteModal', { static: true }) confirmDeleteModal: TemplateRef<any>;
+  clusterToDelete: Cluster | null = null;
+
+  get isEditing(): boolean {
+    return this.editingCluster !== null;
+  }
+
+  get isClusterFormMode(): boolean {
+    return this.clusterCreationMode || this.editingCluster !== null;
+  }
 
   get observationCountLabel(): string {
     const count = this.mapListService.tableData.length;
     const limit = this.config.CLUSTERS.OBSERVATIONS_LIMIT;
     return count >= limit ? `${count}+` : String(count);
+  }
+
+  public acceptedTaxon: Taxon | null = null;
+  public acceptedTaxonControl = new UntypedFormControl();
+  public filterName = '';
+  public filterStatusIds: number[] = [];
+  public filterYearlyStateIds: number[] = [];
+  public filterTaxonNames: string[] = [];
+  public filterManagerNames: string[] = [];
+  public activeDropdown = '';
+  public lastSearchHadFilters = false;
+
+  get statusOptions(): { id: number; label: string }[] {
+    const map = new Map<number, string>();
+    this.clusters.forEach((c) => {
+      if (c.status && c.status.id_nomenclature != null) {
+        map.set(c.status.id_nomenclature, c.status.label_default || c.status.mnemonique);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  get yearlyStateOptions(): { id: number; label: string }[] {
+    const map = new Map<number, string>();
+    this.clusters.forEach((c) => {
+      if (c.yearly_state && c.yearly_state.id_nomenclature != null) {
+        map.set(c.yearly_state.id_nomenclature, c.yearly_state.label_default || c.yearly_state.mnemonique);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  get taxonOptions(): string[] {
+    const set = new Set<string>();
+    this.clusters.forEach((c) => set.add(getTaxonName(c)));
+    return Array.from(set).sort();
+  }
+
+  get managerOptions(): string[] {
+    const set = new Set<string>();
+    this.clusters.forEach((c) => {
+      const name = getManagerName(c);
+      if (name) set.add(name);
+    });
+    return Array.from(set).sort();
+  }
+
+  get filteredClusters(): Cluster[] {
+    return this.clusters.filter((c) => this.clusterMatchesFilters(c));
+  }
+
+  private clusterMatchesFilters(c: Cluster): boolean {
+    if (this.filterName && !c.name.toLowerCase().includes(this.filterName.toLowerCase())) return false;
+    if (this.filterStatusIds.length > 0 && (!c.status || !this.filterStatusIds.includes(c.status.id_nomenclature))) return false;
+    if (this.filterYearlyStateIds.length > 0 && (!c.yearly_state || !this.filterYearlyStateIds.includes(c.yearly_state.id_nomenclature))) return false;
+    if (this.filterTaxonNames.length > 0 && !this.filterTaxonNames.includes(getTaxonName(c))) return false;
+    if (this.filterManagerNames.length > 0 && !this.filterManagerNames.includes(getManagerName(c))) return false;
+    return true;
+  }
+
+  private refreshClusterMapLayer() {
+    if (this.clusterFC) {
+      this.updateClusterLayer();
+    }
+  }
+
+  toggleFilterStatus(id: number) {
+    const idx = this.filterStatusIds.indexOf(id);
+    idx >= 0 ? this.filterStatusIds.splice(idx, 1) : this.filterStatusIds.push(id);
+    this.refreshClusterMapLayer();
+  }
+
+  toggleFilterYearlyState(id: number) {
+    const idx = this.filterYearlyStateIds.indexOf(id);
+    idx >= 0 ? this.filterYearlyStateIds.splice(idx, 1) : this.filterYearlyStateIds.push(id);
+    this.refreshClusterMapLayer();
+  }
+
+  toggleFilterTaxon(name: string) {
+    const idx = this.filterTaxonNames.indexOf(name);
+    idx >= 0 ? this.filterTaxonNames.splice(idx, 1) : this.filterTaxonNames.push(name);
+    this.refreshClusterMapLayer();
+  }
+
+  toggleFilterManager(name: string) {
+    const idx = this.filterManagerNames.indexOf(name);
+    idx >= 0 ? this.filterManagerNames.splice(idx, 1) : this.filterManagerNames.push(name);
+    this.refreshClusterMapLayer();
+  }
+
+  onFilterNameChange(value: string) {
+    this.filterName = value;
+    this.refreshClusterMapLayer();
+  }
+
+  onAcceptedTaxonSelect(event: NgbTypeaheadSelectItemEvent) {
+    const taxon = event.item as Taxon;
+    if (taxon) {
+      this.acceptedTaxon = taxon;
+      this.loadClusters();
+      this.loadData();
+    }
+  }
+
+  onAcceptedTaxonDelete() {
+    this.acceptedTaxon = null;
+    this.acceptedTaxonControl.reset();
+    this.loadClusters();
+    this.loadData();
+  }
+
+  clearFilters() {
+    this.filterName = '';
+    this.filterStatusIds = [];
+    this.filterYearlyStateIds = [];
+    this.filterTaxonNames = [];
+    this.filterManagerNames = [];
+    this.refreshClusterMapLayer();
+  }
+
+  @HostListener('document:click')
+  closeDropdowns() {
+    this.activeDropdown = '';
   }
 
   private clusterFC: GeoJSON.FeatureCollection | null = null;
@@ -66,6 +219,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   constructor(
     public config: ConfigService,
+    public moduleService: ModuleService,
     public searchService: SyntheseDataService,
     public mapListService: MapListService,
     private modalService: NgbModal,
@@ -77,9 +231,21 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     private changeDetector: ChangeDetectorRef,
     private router: Router,
     private clustersDataService: ClustersDataService,
-    private _ms: MapService
+    private _ms: MapService,
+    private _fb: UntypedFormBuilder,
+    private _dfService: DataFormService
   ) {
     this.clusterFeatureGroup = new L.FeatureGroup();
+    this.creationForm = this._fb.group({
+      geometry: [null, Validators.required],
+      properties: this._fb.group({
+        name: [null, Validators.required],
+        notes: null,
+        cd_nom: [null, Validators.required],
+        status_id: null,
+        yearly_state_id: null,
+      }),
+    });
   }
 
   ngOnInit() {
@@ -110,6 +276,14 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
     this.loadClusters();
 
+    const addObsModuleCode = this.config.CLUSTERS.CREATE_OBS_MODULE;
+    if (addObsModuleCode) {
+      const addObsModule = this.moduleService.getModule(addObsModuleCode);
+      if (addObsModule) {
+        this.addObsModulePath = addObsModule.module_path;
+      }
+    }
+
     this.subscriptions.push(
       this.mapListService.onMapClik$.subscribe((ids: any) => {
         this.selectedObsIds = new Set(Array.isArray(ids) ? ids : [ids]);
@@ -119,29 +293,56 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         this.activeTab = 'observations';
       })
     );
+
+    const pendingClusterId = this.route.snapshot.queryParamMap.get('associateClusterId');
+    const pendingObsIds = this.route.snapshot.queryParamMap.get('associateObsIds');
+    if (pendingClusterId && pendingObsIds) {
+      this.pendingAssociate = {
+        clusterId: Number(pendingClusterId),
+        obsIds: pendingObsIds.split(',').map(Number),
+      };
+    }
+
+    this.subscriptions.push(
+      this._ms.gettingGeojson$
+        .pipe(filter(() => this.isClusterFormMode))
+        .subscribe((geojson) => {
+          this.drawnGeometry = geojson.geometry;
+          this.creationForm.patchValue({ geometry: geojson.geometry });
+        })
+    );
   }
 
   ngAfterViewInit() {
     if (this._ms.map) {
       this._ms.map.addLayer(this.clusterFeatureGroup);
+      this.obsMap?.bringObservationsToFront();
       this.addClustersSwitch();
       this.addObsWithoutClusterSwitch();
       this.addObsWithClusterSwitch();
+      this.addMapLegend();
     }
   }
 
   ngOnDestroy() {
     this.subscriptions.forEach((s) => s.unsubscribe());
+    if (this.isClusterFormMode) {
+      this._ms.map.off((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
+    }
     if (this._ms.map && this.clusterFeatureGroup) {
       this._ms.map.removeLayer(this.clusterFeatureGroup);
     }
   }
 
   private loadClusters() {
-    this.clustersDataService.listClusters().subscribe((fc) => {
+    const cdNoms = this.acceptedTaxon ? [this.acceptedTaxon.cd_nom] : [];
+    this.clustersDataService.listClustersByCdNoms(cdNoms).subscribe((fc) => {
       this.clusterFC = fc;
       this.clusters = (fc.features || []).map((f) => f.properties as Cluster);
       this.updateClusterLayer();
+    });
+    this.clustersDataService.listClusters().subscribe((fc) => {
+      this.allClusters = (fc.features || []).map((f) => f.properties as Cluster);
     });
   }
 
@@ -151,7 +352,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     }
     return {
       type: 'FeatureCollection',
-      features: this.clusterFC.features.filter((f) => f.geometry),
+      features: this.clusterFC.features.filter((f) => f.geometry && this.clusterMatchesFilters(f.properties as Cluster)),
     };
   }
 
@@ -243,9 +444,38 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.selectedObsIds = new Set();
     this.selectedObsRowId = null;
     this.selectedClusterId = cluster.id;
-    this.syntheseCarte?.clearMapSelection();
+    this.obsMap?.clearMapSelection();
     this.highlightClusterLayer(cluster.id);
     this.activeTab = 'clusters';
+  }
+
+  onClusterInfo(cluster: Cluster) {
+    const modalRef = this.modalService.open(ClustersInfoModalComponent, { size: 'lg' });
+    modalRef.componentInstance.cluster = cluster;
+    modalRef.result.then(
+      (result) => this.enterEditMode(result),
+      () => {}
+    );
+  }
+
+  onDeleteCluster(cluster: Cluster) {
+    this.clusterToDelete = cluster;
+    this.modalService.open(this.confirmDeleteModal).result.then(
+      () => {
+        this.clustersDataService.deleteCluster(cluster.id).subscribe({
+          next: () => {
+            this.toasterService.success('Foyer supprimé');
+            this.clusterToDelete = null;
+            this.loadClusters();
+          },
+          error: () => {
+            this.toasterService.error('Erreur lors de la suppression');
+            this.clusterToDelete = null;
+          },
+        });
+      },
+      () => { this.clusterToDelete = null; }
+    );
   }
 
   private onClusterMapClick(clusterId: number) {
@@ -278,7 +508,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       }
     }
     this.formService
-      .processDefaultFilters(this.config.SYNTHESE.DEFAULT_FILTERS)
+      .processDefaultFilters(this.config.CLUSTERS.DEFAULT_FILTERS)
       .subscribe((processedDefaultFilters) => {
         if (params.get('id_import')) {
           processedDefaultFilters['id_import'] = params.get('id_import');
@@ -293,6 +523,9 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   loadData() {
     let formParams = this.formService.formatParams();
+    this.lastSearchHadFilters = Object.keys(formParams).some(
+      key => key !== 'id_source'
+    );
     if (this.clusterFilter === null && !this.includeOrphanObs) {
       formParams['cluster_id'] = '*';
     } else if (this.clusterFilter === null && this.includeOrphanObs) {
@@ -302,17 +535,22 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     } else if (this.clusterFilter !== null && this.includeOrphanObs) {
       formParams['cluster_id'] = [null, ...this.clusterFilter];
     }
+    if (this.acceptedTaxon) {
+      formParams['cd_ref_parent'] = [this.acceptedTaxon.cd_ref];
+      formParams['cd_ref'] = [this.acceptedTaxon.cd_ref];
+    }
     this.searchService.dataLoaded = false;
     this.formService.searchForm.markAsPristine();
 
     this.searchService.getSyntheseData(formParams, this.formService.selectors).subscribe(
       (data) => {
         this.parseGeoJson(data);
-        this.displayMessageLimitNumberObservationsReached(formParams);
         this.searchService.dataLoaded = true;
+        this.checkPendingAssociate();
       },
       () => {
         this.searchService.dataLoaded = true;
+        this.checkPendingAssociate();
       }
     );
   }
@@ -376,16 +614,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   private buildObservationsProperty() {
     return { id_synthese: Array.from(this.idsByFeature) };
-  }
-
-  private displayMessageLimitNumberObservationsReached(formParams) {
-    if (this.syntheseStore.idSyntheseList.size >= this.config.SYNTHESE.NB_MAX_OBS_MAP) {
-      const modalRef = this.modalService.open(SyntheseModalDownloadComponent, {
-        size: 'lg',
-      });
-      modalRef.componentInstance.queryString = this.searchService.buildQueryUrl(formParams);
-      modalRef.componentInstance.tooManyObs = true;
-    }
   }
 
   private displayMessageGeomAbsence() {
@@ -501,47 +729,80 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this._ms.map.addControl(new ClusterFilterControl());
   }
 
-  onAssociateObservations(obsIds: number[]) {
+  private addMapLegend() {
+    const LegendControl = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd: () => {
+        const container = L.DomUtil.create('div', 'leaflet-bar clusters-legend');
+        container.innerHTML = `
+          <div style="display:flex;align-items:center;padding:2px 6px;font-size:12px">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3388FF;margin-right:4px"></span>
+            Observations
+          </div>
+          <div style="display:flex;align-items:center;padding:2px 6px;font-size:12px">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FF8C00;margin-right:4px"></span>
+            Foyers
+          </div>
+        `;
+        return container;
+      },
+    });
+    this._ms.map.addControl(new LegendControl());
+  }
+
+  onAssociateObservations(obsIds: number[], preselectedClusterId?: number) {
     let currentClusterId: number | null = null;
     if (obsIds.length === 1) {
       const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsIds[0]);
       currentClusterId = obs?.cluster_id ?? null;
     }
-    const modalRef = this.modalService.open(ClustersAssociateModalComponent, { size: 'sm' });
-    modalRef.componentInstance.clusters = this.clusters;
-    modalRef.componentInstance.observationIds = obsIds;
-    modalRef.componentInstance.currentClusterId = currentClusterId;
-    modalRef.result.then(
-      (result: { clusterId: number | null; obsIds: number[] }) => {
-        const requests = result.obsIds
-          .map((obsId) => {
-            if (result.clusterId != null) {
-              return this.clustersDataService.addObservation(result.clusterId, obsId);
-            }
-            const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
-            if (obs?.cluster_id != null) {
-              return this.clustersDataService.removeObservation(obs.cluster_id, obsId);
-            }
-            return null;
-          })
-          .filter(Boolean);
-        forkJoin(requests).subscribe({
-          next: () => {
-            for (const obsId of result.obsIds) {
-              const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
-              if (obs) {
-                obs.cluster_id = result.clusterId;
+
+    const cdNomsSet = new Set<number>();
+    for (const obsId of obsIds) {
+      const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
+      if (obs?.cd_nom) cdNomsSet.add(obs.cd_nom);
+    }
+
+    this.clustersDataService.listClustersByCdNoms(Array.from(cdNomsSet)).subscribe((fc) => {
+      const clusters = (fc.features || []).map((f) => f.properties as Cluster);
+      const modalRef = this.modalService.open(ClustersAssociateModalComponent, { size: 'lg' });
+      modalRef.componentInstance.clusters = clusters;
+      modalRef.componentInstance.observationIds = obsIds;
+      modalRef.componentInstance.currentClusterId = currentClusterId;
+      modalRef.componentInstance.preselectedClusterId = preselectedClusterId ?? null;
+      modalRef.componentInstance.createCluster = () => this.onCreateCluster(obsIds);
+      modalRef.result.then(
+        (result: { clusterId: number | null; obsIds: number[] }) => {
+          const requests = result.obsIds
+            .map((obsId) => {
+              if (result.clusterId != null) {
+                return this.clustersDataService.addObservation(result.clusterId, obsId);
               }
-            }
-            this.mapListService.tableData = [...this.mapListService.tableData];
-            this.toasterService.success(
-              `${result.obsIds.length} observation(s) associée(s) au foyer`
-            );
-          },
-        });
-      },
-      () => {}
-    );
+              const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
+              if (obs?.cluster_id != null) {
+                return this.clustersDataService.removeObservation(obs.cluster_id, obsId);
+              }
+              return null;
+            })
+            .filter(Boolean);
+          forkJoin(requests).subscribe({
+            next: () => {
+              for (const obsId of result.obsIds) {
+                const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
+                if (obs) {
+                  obs.cluster_id = result.clusterId;
+                }
+              }
+              this.mapListService.tableData = [...this.mapListService.tableData];
+              this.toasterService.success(
+                `${result.obsIds.length} observation(s) associée(s) au foyer`
+              );
+            },
+          });
+        },
+        () => {}
+      );
+    });
   }
 
   onSelectObsOnMap(idSynthese: number) {
@@ -553,17 +814,174 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   onClusterTaxonClick(cluster: Cluster) {
-    const cdRef = cluster.taxref?.cd_ref ?? cluster.cd_nom;
-    this.formService.selectedtaxonFromComponent = [];
-    this.formService.selectedTaxonFromRankInput = [];
-    this.formService.selectedCdRefFromTree = [cdRef];
-    this.formService.searchForm.patchValue({ cd_nom: null });
-    this.activeTab = 'observations';
-    this.onSearchEvent();
+    if (cluster.taxref) {
+      this.acceptedTaxon = cluster.taxref;
+      this.acceptedTaxonControl.setValue(cluster.taxref);
+      this.loadClusters();
+      this.loadData();
+    }
+  }
+
+  onObsTaxonClick(cdNom: number) {
+    this._dfService.getTaxonInfo(cdNom).subscribe((taxon: Taxon) => {
+      this.acceptedTaxon = taxon;
+      this.acceptedTaxonControl.setValue(taxon);
+      this.loadClusters();
+      this.loadData();
+    });
+  }
+
+  private checkPendingAssociate() {
+    if (this.pendingAssociate && this.searchService.dataLoaded) {
+      const { clusterId, obsIds } = this.pendingAssociate;
+      this.pendingAssociate = null;
+      this.onAssociateObservations(obsIds, clusterId);
+    }
+  }
+
+  onCreateCluster(obsIds?: number[]) {
+    this.pendingObsIdsForCreation = obsIds || null;
+    if (obsIds && obsIds.length > 0 && obsIds.length === 1) {
+      const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsIds[0]);
+      if (obs?.cd_nom) {
+        this.enterDrawingMode(obs.cd_nom);
+        return;
+      }
+    }
+    this.enterDrawingMode();
+  }
+
+  onObsSelectionChange(ids: number[]) {
+    this.selectedObsForActions = ids;
+    this.checkedObsSet = new Set(ids);
+    if (this.obsMap) {
+      this.obsMap.updateCheckedObsIds(this.checkedObsSet);
+    }
+  }
+
+  onAddObs() {
+    if (this.addObsModulePath) {
+      this.router.navigate([`/${this.addObsModulePath}`]);
+    }
   }
 
   openInfoModal(idSynthese) {
     const basePath = this.router.url.split('?')[0].split('/')[1] || 'clusters';
     this.router.navigate([`${basePath}/occurrence`, idSynthese, 'details']);
+  }
+
+  onToggleSearchBar() {
+    if (this.isSearchBarReduced && this.isClusterFormMode) {
+      this.exitFormMode();
+    }
+    this.isSearchBarReduced = !this.isSearchBarReduced;
+  }
+
+  enterDrawingMode(cdNom?: number) {
+    this.clusterCreationMode = true;
+    this.editingCluster = null;
+    this.isSearchBarReduced = true;
+    this.activeTab = 'clusters';
+    this.drawnGeometry = null;
+    this.creationForm.reset();
+    if (cdNom) {
+      this._dfService.getTaxonInfo(cdNom).subscribe((taxon) => {
+        this.creationForm.patchValue({ properties: { cd_nom: taxon } });
+      });
+    }
+    this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
+  }
+
+  enterEditMode(cluster: Cluster) {
+    this.clusterCreationMode = false;
+    this.editingCluster = cluster;
+    this.isSearchBarReduced = true;
+    this.activeTab = 'clusters';
+    this.drawnGeometry = null;
+    this.creationForm.reset();
+    this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
+    this.clustersDataService.getCluster(cluster.id).subscribe((feature) => {
+      if (feature.geometry) {
+        this.drawnGeometry = feature.geometry;
+        this._ms.leafletDrawFeatureGroup.clearLayers();
+        const layer = L.geoJSON(feature.geometry);
+        layer.eachLayer((l: any) => this._ms.leafletDrawFeatureGroup.addLayer(l));
+        this._ms.setGeojsonCoord(feature.geometry);
+      }
+      const c = feature.properties as any;
+      this.creationForm.patchValue({
+        geometry: feature.geometry || null,
+        properties: {
+          name: c.name,
+          notes: c.notes || null,
+          cd_nom: c.taxref || { cd_nom: c.cd_nom },
+          status_id: c.status_id,
+          yearly_state_id: c.yearly_state_id,
+        },
+      });
+    });
+  }
+
+  private _clearGeometryOnDrawStart = () => {
+    if (this.isClusterFormMode) {
+      this.drawnGeometry = null;
+      this.creationForm.patchValue({ geometry: null });
+    }
+  }
+
+  exitFormMode() {
+    this.clusterCreationMode = false;
+    this.editingCluster = null;
+    this.pendingObsIdsForCreation = null;
+    this.drawnGeometry = null;
+    this.creationForm.reset();
+    this._ms.map.off((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
+    this._ms.leafletDrawFeatureGroup.clearLayers();
+    this.formService.searchForm.controls.geoIntersection.reset();
+  }
+
+  saveCluster() {
+    if (this.creationForm.invalid) return;
+    this.waiting = true;
+    const value = JSON.parse(JSON.stringify(this.creationForm.value));
+    if (value.properties.cd_nom && typeof value.properties.cd_nom === 'object') {
+      value.properties.cd_nom = value.properties.cd_nom.cd_nom;
+    }
+    if (this.editingCluster) {
+      this.clustersDataService.updateCluster(this.editingCluster.id, value).subscribe({
+        next: () => {
+          this.waiting = false;
+          this.toasterService.success('Foyer modifié');
+          this.loadClusters();
+          this.exitFormMode();
+        },
+        error: () => {
+          this.waiting = false;
+          this.toasterService.error('Erreur lors de la modification');
+        },
+      });
+    } else {
+      this.clustersDataService.createCluster(value).subscribe({
+        next: (data) => {
+          this.waiting = false;
+          this.toasterService.success('Foyer créé');
+          if (this.pendingObsIdsForCreation && this.pendingObsIdsForCreation.length > 0) {
+            const obsIds = this.pendingObsIdsForCreation;
+            this.pendingObsIdsForCreation = null;
+            this.clusters = [...this.clusters, data as Cluster];
+            this.updateClusterLayer();
+            this.exitFormMode();
+            this.onAssociateObservations(obsIds, data.id);
+          } else {
+            this.loadClusters();
+            this.exitFormMode();
+          }
+        },
+        error: () => {
+          this.waiting = false;
+          this.toasterService.error('Erreur lors de la création');
+        },
+      });
+    }
   }
 }

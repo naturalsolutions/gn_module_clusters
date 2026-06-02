@@ -1,22 +1,24 @@
 import { Component, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
 import { DatatableComponent } from '@swimlane/ngx-datatable';
-import { Cluster } from '../models';
+import { Cluster } from '../../models';
 
 @Component({
-  selector: 'pnx-clusters-obs-list',
-  templateUrl: 'clusters-obs-list.component.html',
-  styleUrls: ['clusters-obs-list.component.scss'],
+  selector: 'pnx-obs-list',
+  templateUrl: 'obs-list.component.html',
+  styleUrls: ['obs-list.component.scss'],
 })
-export class ClustersObsListComponent implements OnChanges {
+export class ObsListComponent implements OnChanges {
   @Input() observations: any[] = [];
   @Input() clusters: Cluster[] = [];
   @Input() selectedObsIds: Set<number> = new Set();
   @Input() selectedObsRowId: number | null = null;
   @Input() visible: boolean = false;
 
+  @Output() taxonClick = new EventEmitter<number>();
   @Output() associateObservations = new EventEmitter<number[]>();
   @Output() openInfoObs = new EventEmitter<number>();
   @Output() selectObsOnMap = new EventEmitter<number>();
+  @Output() selectedIdsChange = new EventEmitter<number[]>();
 
   @ViewChild('table', { static: true }) table: DatatableComponent;
 
@@ -51,6 +53,7 @@ export class ClustersObsListComponent implements OnChanges {
     } else {
       this.selectedIds.add(id);
     }
+    this.selectedIdsChange.emit(this.getSelectedIds());
   }
 
   toggleAll() {
@@ -59,6 +62,7 @@ export class ClustersObsListComponent implements OnChanges {
     } else {
       this.selectedIds = new Set(this.observations.map((o) => o.id_synthese));
     }
+    this.selectedIdsChange.emit(this.getSelectedIds());
   }
 
   isSelected(id: number): boolean {
@@ -96,7 +100,7 @@ export class ClustersObsListComponent implements OnChanges {
   getClusterName(clusterId: number): string {
     if (clusterId == null) return '';
     const cluster = this.clusters.find((c) => c.id === clusterId);
-    return cluster ? cluster.name : String(clusterId);
+    return cluster ? cluster.name : '';
   }
 
   padDate(s: any): string {

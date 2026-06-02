@@ -1,0 +1,57 @@
+<div class="form-group">
+  <small>Nom du foyer *</small>
+  <input
+    type="text"
+    class="form-control form-control-sm"
+    [formControl]="propertiesForm.get('name')"
+    placeholder="Nom du foyer"
+  />
+</div>
+<div class="form-group">
+  <small>Notes</small>
+  <textarea
+    class="form-control form-control-sm"
+    [formControl]="propertiesForm.get('notes')"
+    placeholder="Notes"
+  ></textarea>
+</div>
+<div class="form-group">
+  <pnx-taxonomy
+    label="Taxon"
+    [parentFormControl]="propertiesForm.get('cd_nom')"
+    [charNumber]="3"
+    [listLength]="20"
+  ></pnx-taxonomy>
+</div>
+<div class="form-group">
+  <pnx-nomenclature
+    label="Statut du foyer"
+    [parentFormControl]="propertiesForm.get('status_id')"
+    codeNomenclatureType="CLUSTER_STATUS"
+  ></pnx-nomenclature>
+</div>
+<div class="form-group">
+  <pnx-nomenclature
+    label="État annuel"
+    [parentFormControl]="propertiesForm.get('yearly_state_id')"
+    codeNomenclatureType="CLUSTER_YEARLY_STATE"
+  ></pnx-nomenclature>
+</div>
+<div class="text-right">
+  <button
+    mat-raised-button
+    color="warn"
+    class="uppercase mr-1"
+    (click)="cancel.emit()"
+  >
+    Annuler
+  </button>
+  <button
+    mat-raised-button
+    class="button-success uppercase"
+    [disabled]="creationForm.invalid || waiting"
+    (click)="save.emit()"
+  >
+    {{ isEditing ? 'Modifier' : 'Enregistrer' }}
+  </button>
+</div>

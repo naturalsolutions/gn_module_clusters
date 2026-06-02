@@ -5,11 +5,8 @@ import { HttpClient } from '@angular/common/http';
 import { GN2CommonModule } from '@geonature_common/GN2Common.module';
 import { ClustersMapListComponent } from './clusters-map-list/clusters-map-list.component';
 import { ClustersListComponent } from './clusters-map-list/clusters-list/clusters-list.component';
-import { ClustersFormComponent } from './clusters-form/clusters-form.component';
-import { ClustersFormMapComponent } from './clusters-form/map/clusters-form-map.component';
-import { ClustersFormDetailComponent } from './clusters-form/form/clusters-form-detail.component';
-import { SyntheseListComponent } from './synthese-results/synthese-list/synthese-list.component';
-import { SyntheseCarteComponent } from './synthese-results/synthese-carte/synthese-carte.component';
+import { ClustersCreateFormComponent } from './clusters-map-list/clusters-create-form/clusters-create-form.component';
+import { ClustersObsMapComponent } from './clusters-map-list/clusters-obs-map/clusters-obs-map.component';
 import { SyntheseFormService } from '@geonature_common/form/synthese-form/synthese-form.service';
 import { MapService } from '@geonature_common/map/map.service';
 import { TreeModule } from '@circlon/angular-tree-component';
@@ -17,7 +14,7 @@ import { DynamicFormService } from '@geonature_common/form/dynamic-form-generato
 import { TaxonAdvancedStoreService } from '@geonature_common/form/synthese-form/advanced-form/synthese-advanced-form-store.service';
 import { SharedSyntheseModule } from '@geonature/shared/syntheseSharedModule/synthese-shared.module';
 import { SyntheseInfoObsComponent } from '@geonature/shared/syntheseSharedModule/synthese-info-obs/synthese-info-obs.component';
-import { SyntheseModalDownloadComponent } from './synthese-results/synthese-list/modal-download/modal-download.component';
+
 import { DiscussionCardComponent } from '@geonature/shared/discussionCardModule/discussion-card.component';
 import { AlertInfoComponent } from '@geonature/shared/alertInfoModule/alert-Info.component';
 import { NgbActiveModal, NgbModule } from '@ng-bootstrap/ng-bootstrap';
@@ -38,8 +35,9 @@ import { ConfigService } from '@geonature/services/config.service';
 import { TranslateModule, TranslateLoader, TranslateService } from '@ngx-translate/core';
 import { CustomTranslateLoader } from '@geonature/shared/translate/custom-loader';
 import { I18nService } from '@geonature/shared/translate/i18n-service';
-import { ClustersObsListComponent } from './clusters-obs-list/clusters-obs-list.component';
+import { ObsListComponent } from './clusters-map-list/obs-list/obs-list.component';
 import { ClustersAssociateModalComponent } from './clusters-associate-modal/clusters-associate-modal.component';
+import { ClustersInfoModalComponent } from './clusters-info-modal/clusters-info-modal.component';
 import { ClustersDataService } from './services/clusters-data.service';
 
 const routes: Routes = [
@@ -58,14 +56,6 @@ const routes: Routes = [
         data: { useFrom: 'clusters' },
       },
     ],
-  },
-  {
-    path: 'form',
-    component: ClustersFormComponent,
-  },
-  {
-    path: 'form/:id',
-    component: ClustersFormComponent,
   },
   {
     path: 'taxon/:cd_ref',
@@ -121,22 +111,18 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
   declarations: [
     ClustersMapListComponent,
     ClustersListComponent,
-    ClustersFormComponent,
-    ClustersFormMapComponent,
-    ClustersFormDetailComponent,
-    SyntheseListComponent,
-    SyntheseCarteComponent,
-    SyntheseModalDownloadComponent,
-    ClustersObsListComponent,
+    ClustersCreateFormComponent,
+    ClustersObsMapComponent,
+    ObsListComponent,
     ClustersAssociateModalComponent,
+    ClustersInfoModalComponent,
     SyntheseObsModalWrapperComponent,
   ],
   entryComponents: [
     ClustersMapListComponent,
-    ClustersFormComponent,
     SyntheseInfoObsComponent,
-    SyntheseModalDownloadComponent,
     ClustersAssociateModalComponent,
+    ClustersInfoModalComponent,
     DiscussionCardComponent,
     AlertInfoComponent,
     SyntheseObsModalWrapperComponent,

@@ -4,9 +4,6 @@
   [rows]="observations"
   [columnMode]="'force'"
   [headerHeight]="50"
-  [footerHeight]="50"
-  [limit]="observations.length"
-  [count]="observations.length"
   [selected]="selectedRows"
   [selectionType]="'single'"
   [rowClass]="getRowClass"
@@ -16,13 +13,14 @@
 >
   <ngx-datatable-column [maxWidth]="40" [sortable]="false">
     <ng-template ngx-datatable-header-template>
-      <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll()" />
+      <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll()" (click)="$event.stopPropagation()" />
     </ng-template>
     <ng-template let-row="row" ngx-datatable-cell-template>
       <input
         type="checkbox"
         [checked]="isSelected(row['id_synthese'])"
         (change)="toggleSelection(row['id_synthese'])"
+        (click)="$event.stopPropagation()"
       />
     </ng-template>
   </ngx-datatable-column>
@@ -43,7 +41,9 @@
 
   <ngx-datatable-column prop="nom_vern_or_lb_nom" name="Taxon" [sortable]="true">
     <ng-template let-row="row" ngx-datatable-cell-template>
-      <span [title]="row['nom_vern_or_lb_nom']">{{ row['nom_vern_or_lb_nom'] }}</span>
+      <a class="link-primary" (click)="taxonClick.emit(row['cd_nom']); $event.stopPropagation()" matTooltip="Filtrer avec ce taxon">
+        {{ row['nom_vern_or_lb_nom'] }}
+      </a>
     </ng-template>
   </ngx-datatable-column>
 
@@ -67,10 +67,3 @@
     </ng-template>
   </ngx-datatable-column>
 </ngx-datatable>
-
-<div *ngIf="selectedIds.size > 0" class="actions-btns">
-  <button mat-raised-button color="primary" class="btn-action uppercase" (click)="onBulkAssociate()">
-    Associer à un foyer ({{ selectedIds.size }})
-    <mat-icon>group_add</mat-icon>
-  </button>
-</div>

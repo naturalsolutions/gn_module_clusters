@@ -12,12 +12,19 @@ import { Cluster } from '../models';
     <div class="modal-body">
       <div class="form-group">
         <label>Sélectionner un foyer</label>
-        <select class="form-control" [(ngModel)]="selectedClusterId">
-          <option [ngValue]="null">Aucun</option>
-          <option *ngFor="let c of clusters" [ngValue]="c.id">
-            {{ c.name }}
-          </option>
-        </select>
+        <div class="input-group">
+          <select class="form-control" [(ngModel)]="selectedClusterId">
+            <option [ngValue]="null">Aucun</option>
+            <option *ngFor="let c of clusters" [ngValue]="c.id">
+              {{ c.name }}
+            </option>
+          </select>
+          <div class="input-group-append">
+            <button type="button" class="btn btn-outline-success" (click)="onCreateCluster()">
+              +
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -31,16 +38,25 @@ import { Cluster } from '../models';
 export class ClustersAssociateModalComponent implements OnInit {
   @Input() clusters: Cluster[] = [];
   @Input() currentClusterId: number | null = null;
+  @Input() preselectedClusterId: number | null = null;
+  @Input() createCluster: () => void;
   selectedClusterId: number | null = null;
   observationIds: number[] = [];
 
   constructor(public activeModal: NgbActiveModal) {}
 
   ngOnInit() {
-    this.selectedClusterId = this.currentClusterId;
+    this.selectedClusterId = this.preselectedClusterId ?? this.currentClusterId;
   }
 
   confirm() {
     this.activeModal.close({ clusterId: this.selectedClusterId, obsIds: this.observationIds });
+  }
+
+  onCreateCluster() {
+    this.activeModal.dismiss();
+    if (this.createCluster) {
+      this.createCluster();
+    }
   }
 }

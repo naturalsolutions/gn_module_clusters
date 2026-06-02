@@ -3,11 +3,13 @@
   class="map-card"
 >
   <pnx-leaflet-filelayer
+    *ngIf="drawEnabled"
     (onLoad)="onFileLayerLoaded($event)"
     [removeLayer]="currentLeafletDrawCoord"
     [style]="{ color: 'green' }"
   ></pnx-leaflet-filelayer>
   <pnx-leaflet-draw
+    [bEnable]="drawEnabled"
     [options]="leafletDrawOptions"
     [zoomLevel]="1"
     (layerDrawed)="bindGeojsonForm($event)"

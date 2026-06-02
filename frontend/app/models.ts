@@ -18,6 +18,7 @@ export interface Cluster {
   manager?: Role;
   manager_id?: number;
   created_on?: string;
+  observations_count?: number;
 }
 
 export function getTaxonName(cluster: Cluster): string {
@@ -25,6 +26,13 @@ export function getTaxonName(cluster: Cluster): string {
     return cluster.taxref.nom_vern || cluster.taxref.lb_nom;
   }
   return String(cluster.cd_nom);
+}
+
+export function getManagerName(cluster: Cluster): string {
+  if (cluster.manager) {
+    return cluster.manager.nom_complet || `${cluster.manager.prenom_role || ''} ${cluster.manager.nom_role || ''}`.trim();
+  }
+  return '';
 }
 
 // GeoJSON Feature sent as request payload

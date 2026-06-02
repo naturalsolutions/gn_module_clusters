@@ -19,7 +19,8 @@
     #navBar
     [(ngbCollapse)]="isSearchBarReduced"
   >
-    <pnx-synthese-search (searchClicked)="onSearchEvent()"></pnx-synthese-search>
+    <h6 class="ml-2 mt-2">Rechercher des observations</h6>
+    <pnx-synthese-search #syntheseSearch (searchClicked)="onSearchEvent()" (resetFilter)="onSearchEvent()"></pnx-synthese-search>
   </nav>
 
   <div class="row row-sm page-content">
@@ -27,7 +28,7 @@
       id="sidebarCollapse"
       class="btn btn-toogle-sidenav box-shadow"
       type="button"
-      (click)="isSearchBarReduced = !isSearchBarReduced"
+      (click)="onToggleSearchBar()"
       [attr.aria-expanded]="!isSearchBarReduced"
     >
       <i
@@ -40,11 +41,36 @@
       ></i>
     </button>
     <div class="col-sm-12 col-md-7 padding-sm">
-      <pnx-synthese-carte
+      <pnx-clusters-obs-map
         [inputSyntheseData]="mapListService.geojsonData"
-      ></pnx-synthese-carte>
+        [isClusterFormMode]="isClusterFormMode"
+        [drawEnabled]="!isSearchBarReduced || isClusterFormMode"
+      ></pnx-clusters-obs-map>
     </div>
-    <div class="col-sm-12 col-md-5 padding-sm">
+    <div class="col-sm-12 col-md-5 padding-sm right-panel">
+      <div class="accepted-taxons-line">
+        <i
+          class="fa fa-info-circle text-muted"
+          matTooltip="Affiche uniquement les observations descendantes de ce taxon&#10;Affiche uniquement les foyers ascendants de ce taxon"
+        ></i>
+        <label class="accepted-taxons-label">Filtre taxonomique :</label>
+        <pnx-taxonomy
+          label=""
+          [parentFormControl]="acceptedTaxonControl"
+          [charNumber]="3"
+          [listLength]="20"
+          (onChange)="onAcceptedTaxonSelect($event)"
+          (onDelete)="onAcceptedTaxonDelete()"
+        ></pnx-taxonomy>
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          *ngIf="acceptedTaxon"
+          (click)="onAcceptedTaxonDelete()"
+          title="Effacer le filtre taxon"
+        >
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
       <ul class="nav nav-tabs">
         <li class="nav-item">
           <a
@@ -67,48 +93,174 @@
           </a>
         </li>
       </ul>
-      <div class="tab-content pt-2">
+      <div class="tab-content pt-2 tab-scrollable">
         <div
           class="tab-pane"
           [class.active]="activeTab === 'observations'"
         >
-          <pnx-clusters-obs-list
+          <div class="ml-2 text-info" *ngIf="acceptedTaxon">
+            <i class="fa fa-filter"></i> Observations descendantes du taxon {{ acceptedTaxon.nom_valide || acceptedTaxon.lb_nom || acceptedTaxon.nom_complet }}
+          </div>
+          <div class="ml-2 text-muted">Pour rechercher des observations, utilisez <a style="color:#007bff;text-decoration:underline;cursor:pointer" (click)="onToggleSearchBar()">le formulaire de gauche</a>.</div>
+          <div class="ml-2 text-danger" *ngIf="lastSearchHadFilters">
+            <i class="fa fa-exclamation-triangle"></i> Résultats partiels — <a style="color:#007bff;text-decoration:underline;cursor:pointer" (click)="syntheseSearch.refreshFilters()">effacer les filtres de recherche</a>.
+          </div>
+          <pnx-obs-list
+            #obsList
             [observations]="mapListService.tableData"
-            [clusters]="clusters"
+            [clusters]="allClusters"
             [selectedObsIds]="selectedObsIds"
             [selectedObsRowId]="selectedObsRowId"
             [visible]="activeTab === 'observations'"
+            (selectedIdsChange)="onObsSelectionChange($event)"
             (associateObservations)="onAssociateObservations($event)"
             (openInfoObs)="openInfoModal($event)"
             (selectObsOnMap)="onSelectObsOnMap($event)"
-          ></pnx-clusters-obs-list>
+            (taxonClick)="onObsTaxonClick($event)"
+          ></pnx-obs-list>
+          <div class="actions-btns">
+            <button
+              *ngIf="addObsModulePath"
+              mat-raised-button
+              color="primary"
+              class="btn-action uppercase mr-2"
+              (click)="onAddObs()"
+            >
+              Créer une observation
+              <mat-icon>add_circle_outline</mat-icon>
+            </button>
+            <button
+              *ngIf="selectedObsForActions.length > 0"
+              mat-raised-button
+              color="primary"
+              class="btn-action uppercase"
+              (click)="onAssociateObservations(selectedObsForActions)"
+            >
+              Associer à un foyer ({{ selectedObsForActions.length }})
+              <mat-icon>group_add</mat-icon>
+            </button>
+          </div>
         </div>
         <div
           class="tab-pane"
           [class.active]="activeTab === 'clusters'"
         >
+          <div class="ml-2 text-info" *ngIf="acceptedTaxon">
+            <i class="fa fa-filter"></i> Foyers acceptant le taxon {{ acceptedTaxon.nom_valide || acceptedTaxon.lb_nom || acceptedTaxon.nom_complet }}
+          </div>
+          <div class="clusters-filters">
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              placeholder="Nom…"
+              [ngModel]="filterName"
+              (ngModelChange)="onFilterNameChange($event)"
+            />
+            <div class="dropdown" *ngIf="statusOptions.length" [class.show]="activeDropdown === 'status'" (click)="$event.stopPropagation()">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" (click)="activeDropdown = activeDropdown === 'status' ? '' : 'status'">
+                Statut{{ filterStatusIds.length ? ' (' + filterStatusIds.length + ')' : '' }}
+              </button>
+              <div class="dropdown-menu" [class.show]="activeDropdown === 'status'">
+                <label class="dropdown-item" *ngFor="let opt of statusOptions">
+                  <input type="checkbox" [checked]="filterStatusIds.includes(opt.id)" (change)="toggleFilterStatus(opt.id)" />
+                  {{ opt.label }}
+                </label>
+              </div>
+            </div>
+            <div class="dropdown" *ngIf="yearlyStateOptions.length" [class.show]="activeDropdown === 'yearlyState'" (click)="$event.stopPropagation()">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" (click)="activeDropdown = activeDropdown === 'yearlyState' ? '' : 'yearlyState'">
+                État{{ filterYearlyStateIds.length ? ' (' + filterYearlyStateIds.length + ')' : '' }}
+              </button>
+              <div class="dropdown-menu" [class.show]="activeDropdown === 'yearlyState'">
+                <label class="dropdown-item" *ngFor="let opt of yearlyStateOptions">
+                  <input type="checkbox" [checked]="filterYearlyStateIds.includes(opt.id)" (change)="toggleFilterYearlyState(opt.id)" />
+                  {{ opt.label }}
+                </label>
+              </div>
+            </div>
+            <div class="dropdown" *ngIf="taxonOptions.length" [class.show]="activeDropdown === 'taxon'" (click)="$event.stopPropagation()">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" (click)="activeDropdown = activeDropdown === 'taxon' ? '' : 'taxon'">
+                Taxon{{ filterTaxonNames.length ? ' (' + filterTaxonNames.length + ')' : '' }}
+              </button>
+              <div class="dropdown-menu" [class.show]="activeDropdown === 'taxon'">
+                <label class="dropdown-item" *ngFor="let opt of taxonOptions">
+                  <input type="checkbox" [checked]="filterTaxonNames.includes(opt)" (change)="toggleFilterTaxon(opt)" />
+                  {{ opt }}
+                </label>
+              </div>
+            </div>
+            <div class="dropdown" *ngIf="managerOptions.length" [class.show]="activeDropdown === 'manager'" (click)="$event.stopPropagation()">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" (click)="activeDropdown = activeDropdown === 'manager' ? '' : 'manager'">
+                Gestionnaire{{ filterManagerNames.length ? ' (' + filterManagerNames.length + ')' : '' }}
+              </button>
+              <div class="dropdown-menu" [class.show]="activeDropdown === 'manager'">
+                <label class="dropdown-item" *ngFor="let opt of managerOptions">
+                  <input type="checkbox" [checked]="filterManagerNames.includes(opt)" (change)="toggleFilterManager(opt)" />
+                  {{ opt }}
+                </label>
+              </div>
+            </div>
+            <button
+              class="btn btn-sm btn-outline-secondary"
+              (click)="clearFilters()"
+              *ngIf="filterName || filterStatusIds.length || filterYearlyStateIds.length || filterTaxonNames.length || filterManagerNames.length"
+              title="Réinitialiser les filtres"
+            >
+              <i class="fa fa-times"></i>
+            </button>
+          </div>
+          <small class="ml-2 text-muted">{{ filteredClusters.length }} résultat(s)</small>
           <pnx-clusters-list
-            [clusters]="clusters"
+            [clusters]="filteredClusters"
             [selectedClusterId]="selectedClusterId"
             [clusterFilter]="clusterFilter"
             (clusterFilterChange)="clusterFilter = $event; updateWithClusterSwitch(); onSearchEvent()"
             (clusterClick)="onClusterClick($event)"
             (taxonClick)="onClusterTaxonClick($event)"
+            (editCluster)="enterEditMode($event)"
+            (infoCluster)="onClusterInfo($event)"
+            (deleteCluster)="onDeleteCluster($event)"
           ></pnx-clusters-list>
           <div class="actions-btns">
-            <a
+            <button
               mat-raised-button
               color="primary"
               class="btn-action uppercase"
-              [routerLink]="['form']"
+              (click)="onCreateCluster()"
             >
               Créer un foyer
               <mat-icon>add_circle_outline</mat-icon>
-            </a>
+            </button>
           </div>
         </div>
       </div>
+      <pnx-clusters-create-form
+        *ngIf="clusterCreationMode || editingCluster"
+        [creationForm]="creationForm"
+        [waiting]="waiting"
+        [isEditing]="isEditing"
+        (save)="saveCluster()"
+        (cancel)="exitFormMode()"
+      ></pnx-clusters-create-form>
     </div>
   </div>
 </div>
+<ng-template #confirmDeleteModal let-modal>
+  <div class="modal-header">
+    <h5 class="modal-title">Supprimer le foyer</h5>
+    <button type="button" class="close" (click)="modal.dismiss()">&times;</button>
+  </div>
+  <div class="modal-body">
+    <p *ngIf="clusterToDelete">
+      Êtes-vous sûr de vouloir supprimer le foyer <strong>{{ clusterToDelete.name }}</strong> ?
+    </p>
+    <p *ngIf="clusterToDelete">
+      Ce foyer contient <strong>{{ clusterToDelete.observations_count }}</strong> observation(s).
+    </p>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" (click)="modal.dismiss()">Annuler</button>
+    <button type="button" class="btn btn-danger" (click)="modal.close()">Supprimer</button>
+  </div>
+</ng-template>
 <router-outlet></router-outlet>
