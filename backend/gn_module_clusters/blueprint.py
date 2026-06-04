@@ -251,6 +251,8 @@ def update_cluster(id_cluster, scope):
                         f"Some observations in this cluster have a cd_nom that is not in the new taxon tree ({cluster.cd_nom})."
                     )
 
+                check_cluster_overlap(cluster)
+
     db.session.commit()
     return dump(cluster)
 
