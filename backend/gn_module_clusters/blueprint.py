@@ -82,6 +82,25 @@ rw_fields = [
 def list_clusters(scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
     stmt = sa.select(Cluster).where(Cluster.filter_by_scope(scope))
+
+    accepted_cd_nom = request.args.get("accepted_cd_nom")
+    if accepted_cd_nom:
+        try:
+            accepted_cd_nom = [int(x) for x in accepted_cd_nom.split(",")]
+        except ValueError:
+            raise BadRequest("accepted_cd_nom must be a comma-separated list of integers")
+        accepted_trees = db.session.scalars(
+            sa.select(TaxrefTree).where(TaxrefTree.cd_nom.in_(accepted_cd_nom))
+        ).all()
+        not_found_cd_nom = set(accepted_cd_nom) - set([tree.cd_nom for tree in accepted_trees])
+        if not_found_cd_nom:
+            raise BadRequest(
+                f"Some cd_nom have not been found: {','.join(map(str, not_found_cd_nom))}"
+            )
+        stmt = stmt.join(TaxrefTree, TaxrefTree.cd_nom == Cluster.cd_nom).where(
+            sa.or_(*[TaxrefTree.path.op("@>")(tree.path) for tree in accepted_trees])
+        )
+
     if as_geojson:
         stmt = stmt.options(undefer(Cluster.geom_4326))
     clusters = db.session.scalars(stmt).all()

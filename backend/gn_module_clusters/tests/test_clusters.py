@@ -99,6 +99,78 @@ class TestClusters:
         assert r.mimetype == "application/geo+json"
         assert r.json["type"] == "FeatureCollection"
 
+    def test_list_clusters_accepted_cd_nom(self, users, clusters):
+        set_logged_user(self.client, users["admin_user"])
+        url = url_for("clusters.list_clusters")
+
+        # Invalid parameter
+        r = self.client.get(url, query_string={"accepted_cd_nom": "abc"})
+        assert r.status_code == BadRequest.code, r.data
+
+        # Non-existent cd_nom
+        r = self.client.get(url, query_string={"accepted_cd_nom": "-1"})
+        assert r.status_code == BadRequest.code, r.data
+
+        faucon_pelerin = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 2938))
+        faucons = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 192519))
+        oiseaux = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 185961))
+        mammiferes = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 186206))
+        assert all([faucon_pelerin, faucons, oiseaux, mammiferes])
+
+        area = db.session.execute(
+            sa.select(LAreas).where(
+                LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
+                LAreas.area_code == "26",
+            )
+        ).scalar_one()
+
+        with db.session.begin_nested():
+            faucons_cluster = Cluster(
+                name="Test faucons",
+                manager=users["admin_user"],
+                cd_nom=faucons.cd_nom,
+                geom=area.geom,
+            )
+            db.session.add(faucons_cluster)
+            mammiferes_cluster = Cluster(
+                name="Test mammiferes",
+                manager=users["admin_user"],
+                cd_nom=mammiferes.cd_nom,
+                geom=area.geom,
+            )
+            db.session.add(mammiferes_cluster)
+
+        # Filter by a descendant of faucons => faucons cluster returned
+        r = self.client.get(url, query_string={"accepted_cd_nom": str(faucon_pelerin.cd_nom)})
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name in names
+        assert mammiferes_cluster.name not in names
+
+        # Filter by an parent of faucons => faucons cluster NOT returned
+        r = self.client.get(url, query_string={"accepted_cd_nom": str(oiseaux.cd_nom)})
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name not in names
+        assert mammiferes_cluster.name not in names
+
+        # Filter by the same cd_nom => faucons cluster returned
+        r = self.client.get(url, query_string={"accepted_cd_nom": str(faucons.cd_nom)})
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name in names
+        assert mammiferes_cluster.name not in names
+
+        # Multiple cd_noms including a descendant => faucons cluster still returned
+        r = self.client.get(
+            url,
+            query_string={"accepted_cd_nom": f"{oiseaux.cd_nom},{faucon_pelerin.cd_nom}"},
+        )
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name in names
+        assert mammiferes_cluster.name not in names
+
     def test_get_cluster_permissions(self, users, clusters):
         def url(cluster):
             return url_for("clusters.get_cluster", id_cluster=clusters[cluster].id)
