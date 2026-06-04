@@ -12,7 +12,7 @@ from werkzeug.exceptions import BadRequest, Forbidden, Unauthorized, Conflict
 from geonature.utils.env import db
 from geonature.tests.utils import set_logged_user
 from ref_geo.models import LAreas, BibAreasTypes
-from apptax.taxonomie.models import Taxref
+from apptax.taxonomie.models import Taxref, TaxrefTree
 
 from gn_module_clusters.models import Cluster, ObservarationCluster
 
@@ -441,7 +441,7 @@ class TestClusters:
         ).scalar_one()
         assert cluster.name == "modified 4"
 
-    def test_update_cluster_permissions_change_manager(self, users, clusters):
+    def test_update_cluster_manager(self, users, clusters):
         def url(cluster):
             return url_for("clusters.update_cluster", id_cluster=clusters[cluster].id)
 
@@ -478,7 +478,10 @@ class TestClusters:
         ).scalar_one()
         assert cluster.manager.id_role == users["self_user"].id_role
 
-    def test_update_cluster_overlap(self, users, clusters):
+        r = self.client.post(url("c1"), json={"manager_id": -1})
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_update_cluster_geom(self, users, clusters):
         set_logged_user(self.client, users["self_user"])
 
         # Verify fixtures are appropriate for this test purpose
@@ -561,6 +564,74 @@ class TestClusters:
                 "status_id": yearly_state.id_nomenclature,
                 "yearly_state_id": status.id_nomenclature,
             },
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+        r = self.client.post(
+            url("c1"),
+            json={
+                "status_id": -1,
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_update_cluster_cd_nom(self, users, clusters, synthese_data):
+        set_logged_user(self.client, users["self_user"])
+
+        # # Verify fixtures are appropriate for this test purpose
+        # assert clusters["c1"].cd_nom == clusters["c2"].cd_nom
+        # assert clusters["c1"].cd_nom != clusters["c5"].cd_nom
+        # assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
+
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": -1},
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+        animaux = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 183716))
+        oiseaux = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 185961))
+        rapaces_diurnes = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 186050))
+        faucons = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 192519))
+        faucon_pelerin = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 2938))
+        mammiferes = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 186206))
+        with db.session.begin_nested():
+            clusters["c1"].cd_nom = oiseaux.cd_nom
+            synthese_data["obs2"].cd_nom = faucons.cd_nom
+            synthese_data["obs2"].cluster = clusters["c1"]
+
+        # animaux >= faucons => OK
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": animaux.cd_nom},
+        )
+        assert r.status_code == 200, r.data
+
+        # rapaces_diurnes >= faucons => OK
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": rapaces_diurnes.cd_nom},
+        )
+        assert r.status_code == 200, r.data
+
+        # faucons >= faucons => OK
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": faucons.cd_nom},
+        )
+        assert r.status_code == 200, r.data
+
+        # ! faucon_pelerin >= faucons => KO
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": faucon_pelerin.cd_nom},
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+        # ! mammifères >= faucons => KO
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
+            json={"cd_nom": mammiferes.cd_nom},
         )
         assert r.status_code == BadRequest.code, r.data
 
