@@ -232,6 +232,12 @@ class TestClusters:
         assert r.mimetype == "application/geo+json"
         assert r.json["type"] == "Feature"
 
+    def test_get_cluster_properties(self, users, clusters):
+        set_logged_user(self.client, users["self_user"])
+        r = self.client.get(url_for("clusters.get_cluster", id_cluster=clusters["c1"].id))
+        assert r.status_code == 200, r.data
+        assert "surface" in r.json, r.data
+
     def test_create_cluster_permissions(self, users, remove_existing_clusters):
         url = url_for("clusters.create_cluster")
         area = db.session.execute(

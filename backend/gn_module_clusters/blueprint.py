@@ -53,10 +53,10 @@ def check_cluster_overlap(cluster):
         raise Conflict("A cluster with the same cd_nom already overlaps this geometry")
 
 
-def dump(*args, as_geojson=None, **kwargs):
+def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    only = ["manager", "taxref", "status", "yearly_state"]
+    only += ["manager", "taxref", "status", "yearly_state"]
     if request.args.get("observations_count"):
         only += ["+observations_count"]
     data = ClusterSchema(only=only, as_geojson=as_geojson).dump(*args, **kwargs)
@@ -162,7 +162,7 @@ def create_cluster(scope):
 @check_cruved_scope(action="R", module_code=MODULE_CODE, get_scope=True)
 def get_cluster(id_cluster, scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    stmt = sa.select(Cluster).where(Cluster.id == id_cluster)
+    stmt = sa.select(Cluster).where(Cluster.id == id_cluster).options(undefer(Cluster.surface))
     if as_geojson:
         stmt = stmt.options(undefer(Cluster.geom_4326))
     cluster = db.session.execute(stmt).scalar_one_or_none()
@@ -170,7 +170,7 @@ def get_cluster(id_cluster, scope):
         raise NotFound
     if not cluster.has_instance_permission(scope):
         raise Forbidden
-    return dump(cluster, as_geojson=as_geojson)
+    return dump(cluster, as_geojson=as_geojson, only=["+surface"])
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["POST"])

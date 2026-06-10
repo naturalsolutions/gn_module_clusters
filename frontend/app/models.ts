@@ -19,6 +19,7 @@ export interface Cluster {
   manager_id?: number;
   created_on?: string;
   observations_count?: number;
+  surface?: number;
 }
 
 export function getTaxonName(cluster: Cluster): string {
@@ -26,6 +27,12 @@ export function getTaxonName(cluster: Cluster): string {
     return cluster.taxref.nom_vern || cluster.taxref.lb_nom;
   }
   return String(cluster.cd_nom);
+}
+
+export function formatSurface(surface: number | null | undefined): string {
+  if (surface == null) return '-';
+  const hectares = surface / 10000;  // m² to ha
+  return `${hectares.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`;
 }
 
 export function getManagerName(cluster: Cluster): string {

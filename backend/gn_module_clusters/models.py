@@ -44,6 +44,8 @@ class Cluster(db.Model):
     manager = db.relationship(User)
     created_on = db.Column(sa.DateTime, server_default=sa.func.now())
 
+    surface = db.column_property(sa.func.ST_Area(geom), deferred=True)
+
     @hybrid_property
     def observations_count(self):
         return db.session.scalar(
