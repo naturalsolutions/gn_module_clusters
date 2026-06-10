@@ -71,4 +71,10 @@ export class ClustersDataService {
       `${this.CLUSTERS_API}/${idCluster}/observations/${idObservation}`
     );
   }
+
+  listObservations(filters: any, selectors: HttpParams): Observable<any> {
+    return this._http.post<any>(`${this.CLUSTERS_API}/observations`, filters, {
+      params: selectors,
+    });
+  }
 }

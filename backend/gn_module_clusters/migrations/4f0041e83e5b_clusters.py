@@ -16,7 +16,7 @@ from utils_flask_sqla.migrations.utils import logger
 revision = "4f0041e83e5b"
 down_revision = None
 branch_labels = "clusters"
-depends_on = ("707390c722fe",)  # FIXME: choose a suficient version (GN 2.15?)
+depends_on = ("65d922a77eb5",)
 
 
 def upgrade():
@@ -202,9 +202,35 @@ def upgrade():
     # Permissions pour le module
     logger.info("Create module permissions")
     perm_object = sa.Table("t_objects", metadata, schema="gn_permissions", autoload_with=conn)
-    id_object_all = conn.execute(
-        sa.select(perm_object).where(perm_object.c.code_object == "ALL")
-    ).scalar()
+    id_object_cluster = conn.execute(
+        sa.insert(perm_object)
+        .values(
+            code_object="CLUSTERS_CLUSTERS",
+            label_object="Foyers",
+            description_object="Permission sur les foyers.",
+        )
+        .returning(perm_object.c.id_object)
+    ).scalar_one()
+    id_object_obs = conn.execute(
+        sa.insert(perm_object)
+        .values(
+            code_object="CLUSTERS_OBSERVATIONS",
+            label_object="Observations",
+            description_object="Permission sur l’associations des observations aux foyers.",
+        )
+        .returning(perm_object.c.id_object)
+    ).scalar_one()
+    object_module = sa.Table(
+        "cor_object_module", metadata, schema="gn_permissions", autoload_with=conn
+    )
+    conn.execute(
+        sa.insert(object_module).values(
+            [
+                {"id_module": id_module, "id_object": id_object_cluster},
+                {"id_module": id_module, "id_object": id_object_obs},
+            ]
+        )
+    )
     action = sa.Table("bib_actions", metadata, schema="gn_permissions", autoload_with=conn)
     id_action_create = conn.execute(sa.select(action).where(action.c.code_action == "C")).scalar()
     id_action_read = conn.execute(sa.select(action).where(action.c.code_action == "R")).scalar()
@@ -218,31 +244,53 @@ def upgrade():
             [
                 {
                     "id_module": id_module,
-                    "id_object": id_object_all,
+                    "id_object": id_object_cluster,
                     "id_action": id_action_create,
-                    "label": "Créer des foyers de contamination",
+                    "label": "Créer des foyers d’envahissement",
                     "scope_filter": True,
+                    "sensitivity_filter": False,
+                    "areas_filter": False,
+                    "taxons_filter": False,
                 },
                 {
                     "id_module": id_module,
-                    "id_object": id_object_all,
+                    "id_object": id_object_cluster,
                     "id_action": id_action_read,
-                    "label": "Voir les foyers de contamination",
+                    "label": "Voir les foyers d’envahissement",
                     "scope_filter": True,
+                    "sensitivity_filter": False,
+                    "areas_filter": False,
+                    "taxons_filter": False,
                 },
                 {
                     "id_module": id_module,
-                    "id_object": id_object_all,
+                    "id_object": id_object_cluster,
                     "id_action": id_action_update,
-                    "label": "Modifier des foyers de contamination",
+                    "label": "Modifier des foyers d’envahissement",
                     "scope_filter": True,
+                    "sensitivity_filter": False,
+                    "areas_filter": False,
+                    "taxons_filter": False,
                 },
                 {
                     "id_module": id_module,
-                    "id_object": id_object_all,
+                    "id_object": id_object_cluster,
                     "id_action": id_action_delete,
-                    "label": "Supprimer des foyers de contamination",
+                    "label": "Supprimer des foyers d’envahissement",
                     "scope_filter": True,
+                    "sensitivity_filter": False,
+                    "areas_filter": False,
+                    "taxons_filter": False,
+                },
+                {
+                    "id_module": id_module,
+                    "id_object": id_object_obs,
+                    "id_action": id_action_update,
+                    "label": "Modifier le foyer de rattachement des observations",
+                    "scope_filter": True,
+                    "sensitivity_filter": True,
+                    "areas_filter": True,
+                    "taxons_filter": True,
                 },
             ]
         )
@@ -261,6 +309,12 @@ def downgrade():
     )
     op.execute(
         sa.delete(permissions_available).where(permissions_available.c.id_module == id_module)
+    )
+    perm_object = sa.Table("t_objects", metadata, schema="gn_permissions", autoload_with=conn)
+    op.execute(
+        sa.delete(perm_object).where(
+            perm_object.c.code_object.in_(["CLUSTERS_CLUSTERS", "CLUSTERS_OBSERVATIONS"])
+        )
     )
 
     logger.info("Remove module tables")

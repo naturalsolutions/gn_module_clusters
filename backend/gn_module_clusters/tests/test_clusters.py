@@ -779,6 +779,11 @@ class TestClusters:
             )
         )
 
+    def test_list_observations(self, users, synthese_data):
+        set_logged_user(self.client, users["admin_user"])
+        r = self.client.post(url_for("clusters.list_observations"))
+        assert r.status_code == 200, r.data
+
     def test_cluster_observation_add(
         self, users, clusters, synthese_data, sources_modules, monkeypatch
     ):

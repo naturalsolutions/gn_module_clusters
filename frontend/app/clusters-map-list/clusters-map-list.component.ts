@@ -12,7 +12,6 @@ import { ToastrService } from 'ngx-toastr';
 
 import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
-import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthese-data.service';
 import { MapListService } from '@geonature_common/map-list/map-list.service';
 import { MapService } from '@geonature_common/map/map.service';
 import { SyntheseFormService } from '@geonature_common/form/synthese-form/synthese-form.service';
@@ -41,6 +40,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public selectedClusterId: number | null = null;
   public selectedObsIds: Set<number> = new Set();
   public selectedObsRowId: number | null = null;
+  public obsLoaded = false;
+  public clustersLoaded = false;
   public clusterFilter: null | number[] = [];
   public includeOrphanObs = true;
   private pendingSelectClusterId: number | null = null;
@@ -220,7 +221,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   constructor(
     public config: ConfigService,
     public moduleService: ModuleService,
-    public searchService: SyntheseDataService,
     public mapListService: MapListService,
     private modalService: NgbModal,
     private formService: SyntheseFormService,
@@ -351,6 +351,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       this.clusterFC = fc;
       this.clusters = (fc.features || []).map((f) => f.properties as Cluster);
       this.updateClusterLayer();
+      this.clustersLoaded = true;
     });
     this.clustersDataService.listClusters().subscribe((fc) => {
       this.allClusters = (fc.features || []).map((f) => f.properties as Cluster);
@@ -557,17 +558,17 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       formParams['cd_ref_parent'] = [this.acceptedTaxon.cd_ref];
       formParams['cd_ref'] = [this.acceptedTaxon.cd_ref];
     }
-    this.searchService.dataLoaded = false;
+    this.obsLoaded = false;
     this.formService.searchForm.markAsPristine();
 
-    this.searchService.getSyntheseData(formParams, this.formService.selectors).subscribe(
+    this.clustersDataService.listObservations(formParams, this.formService.selectors).subscribe(
       (data) => {
         this.parseGeoJson(data);
-        this.searchService.dataLoaded = true;
+        this.obsLoaded = true;
         this.checkPendingAssociate();
       },
       () => {
-        this.searchService.dataLoaded = true;
+        this.obsLoaded = true;
         this.checkPendingAssociate();
       }
     );
@@ -850,7 +851,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private checkPendingAssociate() {
-    if (this.pendingAssociate && this.searchService.dataLoaded) {
+    if (this.pendingAssociate) {
       const { clusterId, obsIds } = this.pendingAssociate;
       this.pendingAssociate = null;
       this.onAssociateObservations(obsIds, clusterId);

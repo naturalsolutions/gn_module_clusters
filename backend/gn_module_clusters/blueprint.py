@@ -1,11 +1,15 @@
-from flask import Blueprint, request, g, jsonify
+from itertools import permutations
+from flask import Blueprint, request, g, jsonify, current_app
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer
 from utils_flask_sqla_geo.utils import geojsonify
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from geonature.utils.env import db
-from geonature.core.gn_permissions.decorators import check_cruved_scope
+from geonature.core.gn_permissions.decorators import (
+    check_cruved_scope,
+    permissions_required,
+)
 from geonature.core.gn_permissions.tools import get_permissions
 from geonature.core.gn_synthese.models import Synthese
 
@@ -78,7 +82,9 @@ rw_fields = [
 
 
 @blueprint.route(rule="/", methods=["GET"])
-@check_cruved_scope(action="R", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="R", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def list_clusters(scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
     stmt = sa.select(Cluster).where(Cluster.filter_by_scope(scope))
@@ -108,7 +114,9 @@ def list_clusters(scope):
 
 
 @blueprint.route(rule="/", methods=["POST"])
-@check_cruved_scope(action="C", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="C", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def create_cluster(scope):
     as_geojson = request.content_type == "application/geo+json"
     create_schema = ClusterSchema(only=rw_fields, partial=["manager_id"], as_geojson=as_geojson)
@@ -159,7 +167,9 @@ def create_cluster(scope):
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["GET"])
-@check_cruved_scope(action="R", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="R", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def get_cluster(id_cluster, scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
     stmt = sa.select(Cluster).where(Cluster.id == id_cluster).options(undefer(Cluster.surface))
@@ -174,7 +184,9 @@ def get_cluster(id_cluster, scope):
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["POST"])
-@check_cruved_scope(action="U", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def update_cluster(id_cluster, scope):
     cluster = db.session.execute(
         sa.select(Cluster).where(Cluster.id == id_cluster)
@@ -258,7 +270,9 @@ def update_cluster(id_cluster, scope):
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["DELETE"])
-@check_cruved_scope(action="D", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="D", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def delete_cluster(id_cluster, scope):
     cluster = db.session.execute(
         sa.select(Cluster).where(Cluster.id == id_cluster)
@@ -276,8 +290,21 @@ def delete_cluster(id_cluster, scope):
     return "", 204
 
 
+@blueprint.route(rule="/observations", methods=["POST"])
+@permissions_required(action="U", module_code=MODULE_CODE, object_code="CLUSTERS_OBSERVATIONS")
+def list_observations(permissions):
+    # This is the synthese route, decorated with @permissions_required(module_code="SYNTHESE", …)
+    view_function = current_app.view_functions["gn_synthese.synthese.get_observations_for_web"]
+    # This is the synthese route, without the @permissions_required decorator
+    unprotected_view_function = view_function.__wrapped__
+    # We call it directly, with our own set of permissions
+    return unprotected_view_function(permissions=permissions)
+
+
 @blueprint.route(rule="/<int:id_cluster>/observations/<int:id_observation>", methods=["POST"])
-@check_cruved_scope(action="U", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def cluster_add_observation(id_cluster, id_observation, scope):
     cluster = db.session.execute(
         sa.select(Cluster).where(Cluster.id == id_cluster)
@@ -287,8 +314,9 @@ def cluster_add_observation(id_cluster, id_observation, scope):
     if not cluster.has_instance_permission(scope):
         raise Forbidden("You have no rights on this cluster")
     obs_permissions = get_permissions(
-        action_code="R",
-        module_code="SYNTHESE",
+        action_code="U",
+        module_code=MODULE_CODE,
+        object_code="CLUSTERS_OBSERVATIONS",
     )
     if not obs_permissions:
         raise Forbidden("You have no rights on any observations")
@@ -324,8 +352,9 @@ def cluster_remove_observation(id_cluster, id_observation, scope):
     if not cluster.has_instance_permission(scope):
         raise Forbidden("You have no rights on any observations")
     obs_permissions = get_permissions(
-        action_code="R",
-        module_code="SYNTHESE",
+        action_code="U",
+        module_code=MODULE_CODE,
+        object_code="CLUSTERS_OBSERVATIONS",
     )
     if not obs_permissions:
         raise Forbidden("You have no rights on any observations")
