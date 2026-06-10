@@ -7,7 +7,7 @@ import { ClustersDataService } from '../services/clusters-data.service';
   selector: 'pnx-clusters-info-modal',
   template: `
     <div class="modal-header">
-      <h4 class="modal-title">{{ cluster.name }}</h4>
+      <h4 class="modal-title">{{ cluster?.name }}</h4>
       <button type="button" class="close" (click)="activeModal.dismiss()">&times;</button>
     </div>
     <div class="modal-body">
@@ -53,7 +53,8 @@ import { ClustersDataService } from '../services/clusters-data.service';
   `,
 })
 export class ClustersInfoModalComponent implements OnInit {
-  @Input() cluster: Cluster;
+  @Input() clusterId: number;
+  cluster: Cluster;
   loading = true;
 
   constructor(
@@ -62,8 +63,8 @@ export class ClustersInfoModalComponent implements OnInit {
   ) { }
 
   ngOnInit() {
-    if (this.cluster?.id) {
-      this.clustersDataService.getCluster(this.cluster.id).subscribe((feature) => {
+    if (this.clusterId) {
+      this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
         this.cluster = feature.properties as Cluster;
         this.loading = false;
       });

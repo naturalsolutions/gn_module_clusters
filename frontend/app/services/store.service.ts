@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { Subject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
@@ -6,6 +7,7 @@ import { Injectable } from '@angular/core';
 export class SyntheseStoreService {
   public idSyntheseList: Set<number> = new Set();
   private pointData: Object = {};
+  public selectCluster$ = new Subject<number>();
 
   constructor() {}
 

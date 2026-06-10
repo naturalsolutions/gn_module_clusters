@@ -21,7 +21,6 @@ import { ClustersObsMapComponent } from './clusters-obs-map/clusters-obs-map.com
 import { SyntheseStoreService } from '../services/store.service';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { ClustersAssociateModalComponent } from '../clusters-associate-modal/clusters-associate-modal.component';
-import { ClustersInfoModalComponent } from '../clusters-info-modal/clusters-info-modal.component';
 import { DataFormService } from '@geonature_common/form/data-form.service';
 import { Cluster, getTaxonName, getManagerName } from '../models';
 import { Taxon } from '@geonature_common/form/taxonomy/taxonomy.component';
@@ -44,6 +43,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public selectedObsRowId: number | null = null;
   public clusterFilter: null | number[] = [];
   public includeOrphanObs = true;
+  private pendingSelectClusterId: number | null = null;
   public showClusters = true;
   public addObsModulePath: string | null = null;
   public selectedObsForActions: number[] = [];
@@ -311,6 +311,17 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
           this.creationForm.patchValue({ geometry: geojson.geometry });
         })
     );
+
+    this.subscriptions.push(
+      this.syntheseStore.selectCluster$.subscribe((clusterId) => {
+        const cluster = this.allClusters.find((c) => c.id === clusterId);
+        if (cluster) {
+          this.selectCluster(cluster);
+        } else {
+          this.pendingSelectClusterId = clusterId;
+        }
+      })
+    );
   }
 
   ngAfterViewInit() {
@@ -343,6 +354,13 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     });
     this.clustersDataService.listClusters().subscribe((fc) => {
       this.allClusters = (fc.features || []).map((f) => f.properties as Cluster);
+      if (this.pendingSelectClusterId != null) {
+        const cluster = this.allClusters.find((c) => c.id === this.pendingSelectClusterId);
+        if (cluster) {
+          this.selectCluster(cluster);
+        }
+        this.pendingSelectClusterId = null;
+      }
     });
   }
 
@@ -440,7 +458,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     });
   }
 
-  onClusterClick(cluster: Cluster) {
+  private selectCluster(cluster: Cluster) {
     this.selectedObsIds = new Set();
     this.selectedObsRowId = null;
     this.selectedClusterId = cluster.id;
@@ -449,13 +467,13 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.activeTab = 'clusters';
   }
 
+  onClusterClick(cluster: Cluster) {
+    this.selectCluster(cluster);
+  }
+
   onClusterInfo(cluster: Cluster) {
-    const modalRef = this.modalService.open(ClustersInfoModalComponent, { size: 'lg' });
-    modalRef.componentInstance.cluster = cluster;
-    modalRef.result.then(
-      (result) => this.enterEditMode(result),
-      () => {}
-    );
+    this.selectCluster(cluster);
+    this.router.navigate([`${this.moduleService.currentModule.module_path}/cluster`, cluster.id, 'details']);
   }
 
   onDeleteCluster(cluster: Cluster) {

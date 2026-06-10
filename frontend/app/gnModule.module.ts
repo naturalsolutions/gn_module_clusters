@@ -38,6 +38,7 @@ import { I18nService } from '@geonature/shared/translate/i18n-service';
 import { ObsListComponent } from './clusters-map-list/obs-list/obs-list.component';
 import { ClustersAssociateModalComponent } from './clusters-associate-modal/clusters-associate-modal.component';
 import { ClustersInfoModalComponent } from './clusters-info-modal/clusters-info-modal.component';
+import { ClustersInfoModalWrapperComponent } from './clusters-info-modal/clusters-info-modal-wrapper.component';
 import { ClustersDataService } from './services/clusters-data.service';
 
 const routes: Routes = [
@@ -54,6 +55,15 @@ const routes: Routes = [
         path: 'occurrence/:id_synthese/:tab',
         component: SyntheseObsModalWrapperComponent,
         data: { useFrom: 'clusters' },
+      },
+      {
+        path: 'cluster/:id_cluster',
+        redirectTo: 'cluster/:id_cluster/details',
+        pathMatch: 'full',
+      },
+      {
+        path: 'cluster/:id_cluster/:tab',
+        component: ClustersInfoModalWrapperComponent,
       },
     ],
   },
@@ -116,6 +126,7 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
     ObsListComponent,
     ClustersAssociateModalComponent,
     ClustersInfoModalComponent,
+    ClustersInfoModalWrapperComponent,
     SyntheseObsModalWrapperComponent,
   ],
   entryComponents: [
@@ -123,6 +134,7 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
     SyntheseInfoObsComponent,
     ClustersAssociateModalComponent,
     ClustersInfoModalComponent,
+    ClustersInfoModalWrapperComponent,
     DiscussionCardComponent,
     AlertInfoComponent,
     SyntheseObsModalWrapperComponent,
