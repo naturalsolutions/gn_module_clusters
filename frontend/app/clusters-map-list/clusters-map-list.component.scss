@@ -183,4 +183,51 @@ a[data-toggle='collapse'] {
   justify-content: flex-end;
 }
 
+:host ::ng-deep .clusters-mode-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 3px 6px;
+  border-radius: 2px;
+  box-shadow: none !important;
+}
+
+:host ::ng-deep .clusters-mode-control .btn-group {
+  display: flex;
+}
+
+:host ::ng-deep .clusters-mode-btn {
+  line-height: 1.4;
+  font-size: inherit;
+  color: inherit;
+  box-shadow: none !important;
+}
+
+:host ::ng-deep .clusters-mode-btn:not(:first-child) {
+  border-left: none;
+  margin-left: 0;
+}
+
+:host ::ng-deep .clusters-mode-btn:hover {
+  background-color: #e9ecef;
+}
+
+:host ::ng-deep .clusters-mode-control .clusters-mode-btn.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: #fff;
+  box-shadow: none !important;
+}
+
+:host ::ng-deep .clusters-mode-control .clusters-mode-btn:focus {
+  box-shadow: none !important;
+}
+
+:host ::ng-deep .clusters-mode-label {
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: 2px;
+}
+
 

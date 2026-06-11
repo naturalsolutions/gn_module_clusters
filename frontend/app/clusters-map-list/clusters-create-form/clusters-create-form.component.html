@@ -8,12 +8,10 @@
   />
 </div>
 <div class="form-group">
-  <small>Notes</small>
-  <textarea
-    class="form-control form-control-sm"
-    [formControl]="propertiesForm.get('notes')"
-    placeholder="Notes"
-  ></textarea>
+  <small>Gestionnaire</small>
+  <select class="form-control form-control-sm" [formControl]="propertiesForm.get('manager_id')">
+    <option *ngFor="let user of users" [ngValue]="user.id_role">{{ user.nom_complet }}</option>
+  </select>
 </div>
 <div class="form-group">
   <pnx-taxonomy
@@ -36,6 +34,14 @@
     [parentFormControl]="propertiesForm.get('yearly_state_id')"
     codeNomenclatureType="CLUSTER_YEARLY_STATE"
   ></pnx-nomenclature>
+</div>
+<div class="form-group">
+  <small>Notes</small>
+  <textarea
+    class="form-control form-control-sm"
+    [formControl]="propertiesForm.get('notes')"
+    placeholder="Notes"
+  ></textarea>
 </div>
 <div class="text-right">
   <button

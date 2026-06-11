@@ -33,8 +33,9 @@
       </a>
       <a
         class="link-dark"
-        (click)="onEdit(row); $event.stopPropagation()"
-        matTooltip="Modifier le foyer"
+        (click)="row.cruved?.U && onEdit(row); $event.stopPropagation()"
+        matTooltip="{{ row.cruved?.U ? 'Modifier le foyer' : 'Modification non autorisée' }}"
+        [class.text-muted]="!row.cruved?.U"
       >
         <i
           class="fa fa-pencil"
@@ -43,8 +44,9 @@
       </a>
       <a
         class="link-dark ml-1"
-        (click)="onDelete(row); $event.stopPropagation()"
-        matTooltip="Supprimer le foyer"
+        (click)="row.cruved?.D && !row.observations_count && onDelete(row); $event.stopPropagation()"
+        matTooltip="{{ !row.cruved?.D ? 'Suppression non autorisée' : row.observations_count ? 'Ce foyer contient des observations' : 'Supprimer le foyer' }}"
+        [class.text-muted]="!row.cruved?.D || row.observations_count"
       >
         <i
           class="fa fa-trash"

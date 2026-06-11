@@ -1,5 +1,5 @@
-from itertools import permutations
 from flask import Blueprint, request, g, jsonify, current_app
+from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer
 from utils_flask_sqla_geo.utils import geojsonify
@@ -8,13 +8,15 @@ from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from geonature.utils.env import db
 from geonature.core.gn_permissions.decorators import (
     check_cruved_scope,
+    login_required,
     permissions_required,
 )
-from geonature.core.gn_permissions.tools import get_permissions
+from geonature.core.gn_permissions.tools import get_permissions, get_scope
 from geonature.core.gn_synthese.models import Synthese
 
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 from pypnusershub.db.models import User
+from pypnusershub.schemas import UserSchema
 from apptax.taxonomie.models import TaxrefTree
 
 from gn_module_clusters import MODULE_CODE
@@ -54,13 +56,24 @@ def check_cluster_overlap(cluster):
     if cluster.id is not None:  # update case
         where_clauses += [Cluster.id != cluster.id]
     if db.session.scalar(sa.select(sa.exists().where(*where_clauses))):
-        raise Conflict("A cluster with the same cd_nom already overlaps this geometry")
+        raise Conflict(
+            "L’enprise géographique de ce foyer empiète sur un foyer voisin possédant le même cd_nom."
+        )
+
+
+def check_cluster_name(cluster):
+    """Raise Conflict if another cluster with the same name already exists."""
+    where_clauses = [Cluster.name == cluster.name]
+    if cluster.id is not None:  # update case
+        where_clauses += [Cluster.id != cluster.id]
+    if db.session.scalar(sa.select(sa.exists().where(*where_clauses))):
+        raise Conflict("Un foyer avec ce nom existe déjà.")
 
 
 def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    only += ["manager", "taxref", "status", "yearly_state"]
+    only += ["manager", "taxref", "status", "yearly_state", "+cruved"]
     if request.args.get("observations_count"):
         only += ["+observations_count"]
     data = ClusterSchema(only=only, as_geojson=as_geojson).dump(*args, **kwargs)
@@ -82,10 +95,15 @@ rw_fields = [
 
 
 @blueprint.route(rule="/", methods=["GET"])
-@check_cruved_scope(
-    action="R", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
-)
-def list_clusters(scope):
+@login_required
+def list_clusters():
+    action_code = request.args.get("action", "R")
+    scope = get_scope(
+        action_code=action_code, module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS"
+    )
+    if scope == 0:
+        raise Forbidden
+
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
     stmt = sa.select(Cluster).where(Cluster.filter_by_scope(scope))
 
@@ -160,6 +178,7 @@ def create_cluster(scope):
     if cluster.geom_4326.srid < 0:
         cluster.geom_4326.srid = 4326
     check_cluster_overlap(cluster)
+    check_cluster_name(cluster)
 
     db.session.add(cluster)
     db.session.commit()
@@ -180,7 +199,7 @@ def get_cluster(id_cluster, scope):
         raise NotFound
     if not cluster.has_instance_permission(scope):
         raise Forbidden
-    return dump(cluster, as_geojson=as_geojson, only=["+surface"])
+    return dump(cluster, as_geojson=as_geojson, only=["+surface", "+notes"])
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["POST"])
@@ -194,7 +213,7 @@ def update_cluster(id_cluster, scope):
     if not cluster:
         raise NotFound
     if not cluster.has_instance_permission(scope):
-        raise Forbidden
+        raise Forbidden("You do not have access to this cluster.")
 
     as_geojson = request.content_type == "application/geo+json"
     update_schema = ClusterSchema(only=rw_fields, partial=True, as_geojson=as_geojson)
@@ -212,12 +231,14 @@ def update_cluster(id_cluster, scope):
                     cluster.geom_4326.srid = 4326
                 check_cluster_overlap(cluster)
                 # FIXME: check obs are still in cluster geom?
+            elif attr.key == "name":
+                check_cluster_name(cluster)
             elif attr.key == "manager_id":
                 db.session.expire(cluster, ["manager"])
                 if not cluster.manager:
                     raise BadRequest(f"manager with id {cluster.manager_id} not found")
                 if not cluster.has_instance_permission(scope):
-                    raise Forbidden
+                    raise Forbidden(f"You are not allowed to set this manager (scope: {scope}).")
             elif attr.key == "status_id" and cluster.status_id is not None:
                 db.session.expire(cluster, ["status"])
                 if (
@@ -299,6 +320,27 @@ def list_observations(permissions):
     unprotected_view_function = view_function.__wrapped__
     # We call it directly, with our own set of permissions
     return unprotected_view_function(permissions=permissions)
+
+
+@blueprint.route(rule="/roles", methods=["POST"])
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
+def list_roles(scope):
+    # Return roles that the current_user can set as manager on its clusters
+    # Please make sure this function is consistant with Cluster.filter_by_scope / Cluster.has_instance_permission
+    if scope == 0:
+        raise Forbidden
+    if scope == 1:
+        where_clause = User.id_role == current_user.id_role
+    elif scope == 2:
+        where_clause = sa.or_(
+            User.id_role == current_user.id_role, User.id_organisme == current_user.id_organisme
+        )
+    elif scope == 3:
+        where_clause = sa.true()
+    users = db.session.scalars(sa.select(User).where(User.groupe.is_(False), where_clause)).all()
+    return UserSchema().dump(users, many=True)
 
 
 @blueprint.route(rule="/<int:id_cluster>/observations/<int:id_observation>", methods=["POST"])

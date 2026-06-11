@@ -18,16 +18,10 @@ export class ClustersDataService {
     this.CLUSTERS_API = `${this.config.API_ENDPOINT}/clusters`;
   }
 
-  listClusters(): Observable<GeoJSON.FeatureCollection> {
-    const params = new HttpParams().set('observations_count', '1');
-    return this._http.get<GeoJSON.FeatureCollection>(`${this.CLUSTERS_API}/`, {
-      headers: GEOJSON_ACCEPT,
-      params,
-    });
-  }
-
-  listClustersByCdNoms(cdNoms: number[]): Observable<GeoJSON.FeatureCollection> {
-    let params = new HttpParams().set('observations_count', '1');
+  listClusters(cdNoms: number[] = [], action: string = 'R'): Observable<GeoJSON.FeatureCollection> {
+    let params = new HttpParams()
+      .set('observations_count', '1')
+      .set('action', action);
     if (cdNoms.length > 0) {
       params = params.set('accepted_cd_nom', cdNoms.join(','));
     }
@@ -70,6 +64,10 @@ export class ClustersDataService {
     return this._http.delete<void>(
       `${this.CLUSTERS_API}/${idCluster}/observations/${idObservation}`
     );
+  }
+
+  getRoles(): Observable<any[]> {
+    return this._http.post<any[]>(`${this.CLUSTERS_API}/roles`, null);
   }
 
   listObservations(filters: any, selectors: HttpParams): Observable<any> {

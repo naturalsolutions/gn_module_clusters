@@ -1,5 +1,6 @@
 import { Role } from '@geonature/userModule/services/form.service';
 import { Taxon } from '@geonature_common/form/taxonomy/taxonomy.component';
+import { Cruved } from '@geonature/modules/imports/models/cruved.model';
 
 // API response shape
 export interface Cluster {
@@ -20,6 +21,7 @@ export interface Cluster {
   created_on?: string;
   observations_count?: number;
   surface?: number;
+  cruved?: Cruved;
 }
 
 export function getTaxonName(cluster: Cluster): string {

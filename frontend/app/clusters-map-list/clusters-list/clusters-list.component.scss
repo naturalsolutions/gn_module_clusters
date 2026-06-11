@@ -21,6 +21,11 @@
   font-size: 12px;
 }
 
+:host ::ng-deep .datatable-body-cell .text-muted {
+  opacity: 0.4;
+  cursor: default;
+}
+
 :host ::ng-deep .datatable-body {
   overflow-x: scroll;
 }

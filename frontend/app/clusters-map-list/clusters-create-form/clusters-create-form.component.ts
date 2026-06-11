@@ -23,6 +23,7 @@ export class ClustersCreateFormComponent {
   @Input() creationForm: UntypedFormGroup;
   @Input() waiting = false;
   @Input() isEditing = false;
+  @Input() users: any[] = [];
   @Output() save = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
 

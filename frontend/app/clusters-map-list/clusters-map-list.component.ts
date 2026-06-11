@@ -10,6 +10,7 @@ import * as L from 'leaflet';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
 
+import { AuthService } from '@geonature/components/auth/auth.service';
 import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
 import { MapListService } from '@geonature_common/map-list/map-list.service';
@@ -36,7 +37,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public isSearchBarReduced = true;
   public activeTab: string = 'observations';
   public clusters: Cluster[] = [];
-  public allClusters: Cluster[] = [];
   public selectedClusterId: number | null = null;
   public selectedObsIds: Set<number> = new Set();
   public selectedObsRowId: number | null = null;
@@ -45,7 +45,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public clusterFilter: null | number[] = [];
   public includeOrphanObs = true;
   private pendingSelectClusterId: number | null = null;
-  public showClusters = true;
+  public clusterDisplayMode: 'hidden' | 'modifiable' | 'all' = 'modifiable';
   public addObsModulePath: string | null = null;
   public selectedObsForActions: number[] = [];
   public checkedObsSet: Set<number> = new Set();
@@ -53,6 +53,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public editingCluster: Cluster | null = null;
   public creationForm: UntypedFormGroup;
   public waiting = false;
+  public users: any[] = [];
   private pendingAssociate: { clusterId: number; obsIds: number[] } | null = null;
   private drawnGeometry: GeoJSON.Geometry | null = null;
   private pendingObsIdsForCreation: number[] | null = null;
@@ -66,6 +67,10 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   get isClusterFormMode(): boolean {
     return this.clusterCreationMode || this.editingCluster !== null;
+  }
+
+  private get clusterActionParam(): string {
+    return this.clusterDisplayMode === 'modifiable' ? 'U' : 'R';
   }
 
   get observationCountLabel(): string {
@@ -233,7 +238,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     private clustersDataService: ClustersDataService,
     private _ms: MapService,
     private _fb: UntypedFormBuilder,
-    private _dfService: DataFormService
+    private _dfService: DataFormService,
+    private authService: AuthService
   ) {
     this.clusterFeatureGroup = new L.FeatureGroup();
     this.creationForm = this._fb.group({
@@ -244,6 +250,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         cd_nom: [null, Validators.required],
         status_id: null,
         yearly_state_id: null,
+        manager_id: null,
       }),
     });
   }
@@ -273,6 +280,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       this.initializeForm();
       this.applyDefaultFormValues(params);
     });
+
+    this.clustersDataService.getRoles().subscribe((data) => this.users = data);
 
     this.loadClusters();
 
@@ -314,7 +323,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
     this.subscriptions.push(
       this.syntheseStore.selectCluster$.subscribe((clusterId) => {
-        const cluster = this.allClusters.find((c) => c.id === clusterId);
+        const cluster = this.clusters.find((c) => c.id === clusterId);
         if (cluster) {
           this.selectCluster(cluster);
         } else {
@@ -328,7 +337,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     if (this._ms.map) {
       this._ms.map.addLayer(this.clusterFeatureGroup);
       this.obsMap?.bringObservationsToFront();
-      this.addClustersSwitch();
+      this.addClustersModeControl();
       this.addObsWithoutClusterSwitch();
       this.addObsWithClusterSwitch();
       this.addMapLegend();
@@ -346,22 +355,42 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private loadClusters() {
-    const cdNoms = this.acceptedTaxon ? [this.acceptedTaxon.cd_nom] : [];
-    this.clustersDataService.listClustersByCdNoms(cdNoms).subscribe((fc) => {
-      this.clusterFC = fc;
-      this.clusters = (fc.features || []).map((f) => f.properties as Cluster);
-      this.updateClusterLayer();
+    this.clusterFeatureGroup.clearLayers();
+
+    if (this.clusterDisplayMode === 'hidden') {
+      this.clusterFC = null;
+      this.clusters = [];
       this.clustersLoaded = true;
-    });
-    this.clustersDataService.listClusters().subscribe((fc) => {
-      this.allClusters = (fc.features || []).map((f) => f.properties as Cluster);
-      if (this.pendingSelectClusterId != null) {
-        const cluster = this.allClusters.find((c) => c.id === this.pendingSelectClusterId);
-        if (cluster) {
-          this.selectCluster(cluster);
+      return;
+    }
+
+    const action = this.clusterActionParam;
+    const cdNoms = this.acceptedTaxon ? [this.acceptedTaxon.cd_nom] : [];
+
+    this.clustersDataService.listClusters(cdNoms, action).subscribe({
+      next: (fc) => {
+        this.clusterFC = fc;
+        this.clusters = (fc.features || []).map((f) => f.properties as Cluster);
+        this.updateClusterLayer();
+        this.clustersLoaded = true;
+        if (this.pendingSelectClusterId != null) {
+          const cluster = this.clusters.find((c) => c.id === this.pendingSelectClusterId);
+          if (cluster) {
+            this.selectCluster(cluster);
+          }
+          this.pendingSelectClusterId = null;
         }
-        this.pendingSelectClusterId = null;
-      }
+      },
+      error: () => {
+        this.clusterFC = null;
+        this.clusters = [];
+        this.clustersLoaded = true;
+        if (action === 'U') {
+          this.toasterService.warning(
+            'Vous n\'avez pas les droits de modification sur les foyers'
+          );
+        }
+      },
     });
   }
 
@@ -719,33 +748,44 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     }
   }
 
-  private addClustersSwitch() {
-    const ClusterFilterControl = L.Control.extend({
+  private addClustersModeControl() {
+    const ClusterModeControl = L.Control.extend({
       options: { position: 'topright' },
       onAdd: () => {
         const container = L.DomUtil.create(
           'div',
-          'leaflet-bar custom-control custom-switch leaflet-control-custom clusters-orphan-filter'
+          'leaflet-bar leaflet-control-custom clusters-mode-control'
         );
-        const input = L.DomUtil.create('input', 'custom-control-input', container);
-        input.id = 'toggle-clusters-btn';
-        input.type = 'checkbox';
-        input.checked = this.showClusters;
-        input.onclick = () => {
-          this.showClusters = input.checked;
-          if (this.showClusters) {
-            this._ms.map.addLayer(this.clusterFeatureGroup);
-          } else {
-            this._ms.map.removeLayer(this.clusterFeatureGroup);
+        const btnGroup = L.DomUtil.create('div', 'btn-group btn-group-sm', container);
+
+        const modes: Array<{ key: 'hidden' | 'modifiable' | 'all'; icon: string; label: string; title: string }> = [
+          { key: 'hidden', icon: 'fa-eye-slash', label: '', title: 'Masquer les foyers' },
+          { key: 'modifiable', icon: 'fa-pencil', label: 'Associable', title: 'Foyers modifiables' },
+          { key: 'all', icon: 'fa-eye', label: '', title: 'Tous les foyers' },
+        ];
+
+        for (const mode of modes) {
+          const btn = L.DomUtil.create('button', 'btn btn-outline-secondary clusters-mode-btn', btnGroup);
+          btn.innerHTML = `<i class="fa ${mode.icon}"></i>${mode.label ? ' ' + mode.label : ''}`;
+          btn.title = mode.title;
+          if (this.clusterDisplayMode === mode.key) {
+            L.DomUtil.addClass(btn, 'active');
           }
-        };
-        const label = L.DomUtil.create('label', 'custom-control-label', container);
-        label.setAttribute('for', 'toggle-clusters-btn');
+          L.DomEvent.on(btn, 'click', () => {
+            this.clusterDisplayMode = mode.key;
+            btnGroup.querySelectorAll('.clusters-mode-btn').forEach((b) => b.classList.remove('active'));
+            L.DomUtil.addClass(btn, 'active');
+            this.loadClusters();
+          });
+        }
+
+        const label = L.DomUtil.create('span', 'clusters-mode-label', container);
         label.innerText = 'Foyers';
+
         return container;
       },
     });
-    this._ms.map.addControl(new ClusterFilterControl());
+    this._ms.map.addControl(new ClusterModeControl());
   }
 
   private addMapLegend() {
@@ -782,7 +822,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       if (obs?.cd_nom) cdNomsSet.add(obs.cd_nom);
     }
 
-    this.clustersDataService.listClustersByCdNoms(Array.from(cdNomsSet)).subscribe((fc) => {
+    this.clustersDataService.listClusters(Array.from(cdNomsSet), 'U').subscribe((fc) => {
       const clusters = (fc.features || []).map((f) => f.properties as Cluster);
       const modalRef = this.modalService.open(ClustersAssociateModalComponent, { size: 'lg' });
       modalRef.componentInstance.clusters = clusters;
@@ -903,6 +943,11 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.activeTab = 'clusters';
     this.drawnGeometry = null;
     this.creationForm.reset();
+    this.creationForm.patchValue({
+      properties: {
+        manager_id: Number(this.authService.getCurrentUser().id_role),
+      },
+    });
     if (cdNom) {
       this._dfService.getTaxonInfo(cdNom).subscribe((taxon) => {
         this.creationForm.patchValue({ properties: { cd_nom: taxon } });
@@ -936,6 +981,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
           cd_nom: c.taxref || { cd_nom: c.cd_nom },
           status_id: c.status_id,
           yearly_state_id: c.yearly_state_id,
+          manager_id: c.manager_id,
         },
       });
     });
@@ -976,7 +1022,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         },
         error: () => {
           this.waiting = false;
-          this.toasterService.error('Erreur lors de la modification');
         },
       });
     } else {
@@ -998,7 +1043,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         },
         error: () => {
           this.waiting = false;
-          this.toasterService.error('Erreur lors de la création');
         },
       });
     }

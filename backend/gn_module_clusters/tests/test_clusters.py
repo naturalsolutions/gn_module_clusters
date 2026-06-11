@@ -73,7 +73,7 @@ class TestClusters:
         expected_names = set([clusters[c].name for c in ["c1", "c2", "c3"]])
         assert expected_names <= get_names
 
-    def test_list_cluster_json(self, users, clusters):
+    def test_list_clusters_json(self, users, clusters):
         set_logged_user(self.client, users["self_user"])
         r = self.client.get(
             url_for("clusters.list_clusters"),
@@ -89,7 +89,7 @@ class TestClusters:
         assert r.mimetype == "application/json"
         assert "type" not in r.json
 
-    def test_list_cluster_geojson(self, users, clusters):
+    def test_list_clusters_geojson(self, users, clusters):
         set_logged_user(self.client, users["self_user"])
         r = self.client.get(
             url_for("clusters.list_clusters"),
@@ -171,6 +171,17 @@ class TestClusters:
         assert faucons_cluster.name in names
         assert mammiferes_cluster.name not in names
 
+    def test_list_clusters_action(self, users, clusters):
+        set_logged_user(self.client, users["self_user"])
+        r = self.client.get(
+            url_for("clusters.list_clusters", action="U"),
+        )
+        assert r.status_code == 200, r.data
+        r = self.client.get(
+            url_for("clusters.list_clusters", action="X"),
+        )
+        assert r.status_code == Forbidden.code, r.data
+
     def test_get_cluster_permissions(self, users, clusters):
         def url(cluster):
             return url_for("clusters.get_cluster", id_cluster=clusters[cluster].id)
@@ -237,6 +248,8 @@ class TestClusters:
         r = self.client.get(url_for("clusters.get_cluster", id_cluster=clusters["c1"].id))
         assert r.status_code == 200, r.data
         assert "surface" in r.json, r.data
+        assert "notes" in r.json, r.data
+        assert "cruved" in r.json, r.data
 
     def test_create_cluster_permissions(self, users, remove_existing_clusters):
         url = url_for("clusters.create_cluster")
@@ -783,6 +796,37 @@ class TestClusters:
         set_logged_user(self.client, users["admin_user"])
         r = self.client.post(url_for("clusters.list_observations"))
         assert r.status_code == 200, r.data
+
+    def test_list_roles(self, users):
+        from pprint import pprint
+
+        url = url_for(endpoint="clusters.list_roles")
+        r = self.client.post(url)
+        assert r.status_code == Unauthorized.code, r.data
+
+        set_logged_user(self.client, users["noright_user"])
+        r = self.client.post(url)
+        assert r.status_code == Forbidden.code, r.data
+
+        set_logged_user(self.client, users["self_user"])
+        r = self.client.post(url)
+        assert r.status_code == 200, r.data
+        assert len(r.json) == 1, r.json
+        assert r.json[0]["id_role"] == users["self_user"].id_role, r.json
+
+        set_logged_user(self.client, users["associate_user"])
+        r = self.client.post(url)
+        assert r.status_code == 200, r.data
+        id_roles = [user["id_role"] for user in r.json]
+        assert users["self_user"].id_role in id_roles, r.json
+        assert users["stranger_user"].id_role not in id_roles, r.json
+
+        set_logged_user(self.client, users["admin_user"])
+        r = self.client.post(url)
+        assert r.status_code == 200, r.data
+        id_roles = [user["id_role"] for user in r.json]
+        assert users["self_user"].id_role in id_roles, r.json
+        assert users["stranger_user"].id_role in id_roles, r.json
 
     def test_cluster_observation_add(
         self, users, clusters, synthese_data, sources_modules, monkeypatch

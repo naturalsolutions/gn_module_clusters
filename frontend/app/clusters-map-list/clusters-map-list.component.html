@@ -108,7 +108,7 @@
           <pnx-obs-list
             #obsList
             [observations]="mapListService.tableData"
-            [clusters]="allClusters"
+            [clusters]="clusters"
             [selectedObsIds]="selectedObsIds"
             [selectedObsRowId]="selectedObsRowId"
             [visible]="activeTab === 'observations'"
@@ -239,6 +239,7 @@
         [creationForm]="creationForm"
         [waiting]="waiting"
         [isEditing]="isEditing"
+        [users]="users"
         (save)="saveCluster()"
         (cancel)="exitFormMode()"
       ></pnx-clusters-create-form>
