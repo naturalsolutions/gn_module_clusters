@@ -11,8 +11,8 @@
   (activate)="onRowClick($event)"
 >
   <ngx-datatable-column
-    [width]="80"
-    [maxWidth]="80"
+    [width]="100"
+    [maxWidth]="100"
     [flexGrow]="0"
     [sortable]="false"
     name=""
@@ -50,6 +50,17 @@
       >
         <i
           class="fa fa-trash"
+          aria-hidden="true"
+        ></i>
+      </a>
+      <a
+        class="link-dark ml-1"
+        (click)="exportPdf(row); $event.stopPropagation()"
+        matTooltip="Exporter en PDF"
+        [class.text-muted]="row._exporting"
+      >
+        <i
+          class="fa fa-file-pdf-o"
           aria-hidden="true"
         ></i>
       </a>

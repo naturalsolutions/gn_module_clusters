@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
 import { SyntheseStoreService } from '../services/store.service';
 import { ClustersInfoModalComponent } from './clusters-info-modal.component';
@@ -21,24 +22,49 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
     private router: Router,
     private moduleService: ModuleService,
     private storeService: SyntheseStoreService,
+    private config: ConfigService,
     route: ActivatedRoute
   ) {
     this.moduleUrl = `/${this.moduleService.currentModule.module_path}`;
 
+    const addObsModuleCode = this.config.CLUSTERS?.CREATE_OBS_MODULE;
+    let addObsModulePath: string | null = null;
+    if (addObsModuleCode) {
+      const addObsModule = this.moduleService.getModule(addObsModuleCode);
+      if (addObsModule) {
+        addObsModulePath = addObsModule.module_path;
+      }
+    }
+
     route.params.pipe(takeUntil(this.destroy)).subscribe((params) => {
-      this.storeService.selectCluster$.next(+params.id_cluster);
+      const clusterId = +params.id_cluster;
+      this.storeService.selectCluster$.next(clusterId);
 
       this.currentDialog = this.modalService.open(ClustersInfoModalComponent, {
         size: 'lg',
       });
-      this.currentDialog.componentInstance.clusterId = +params.id_cluster;
+      this.currentDialog.componentInstance.clusterId = clusterId;
+
+      if (addObsModulePath) {
+        const redirectUrl = `${this.moduleUrl}/${clusterId}/associate-obs/{id_synthese}`;
+        this.currentDialog.componentInstance.onCreateObs = () => {
+          this.currentDialog.dismiss('create-obs');
+        };
+      }
 
       this.currentDialog.result.then(
         () => {
           this.router.navigateByUrl(this.moduleUrl);
         },
-        () => {
-          this.router.navigateByUrl(this.moduleUrl);
+        (reason) => {
+          if (reason === 'create-obs' && addObsModulePath) {
+            const redirectUrl = `${this.moduleUrl}/${clusterId}/associate-obs/{id_synthese}`;
+            this.router.navigate([`/${addObsModulePath}`], {
+              queryParams: { redirect: redirectUrl },
+            });
+          } else {
+            this.router.navigateByUrl(this.moduleUrl);
+          }
         }
       );
     });

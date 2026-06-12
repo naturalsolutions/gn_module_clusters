@@ -1,6 +1,8 @@
 import { Component, OnInit, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
 import { DatatableComponent } from '@swimlane/ngx-datatable';
 import { Cluster, getTaxonName } from '../../models';
+import { ClustersDataService } from '../../services/clusters-data.service';
+import { saveAs } from 'file-saver';
 
 @Component({
   selector: 'pnx-clusters-list',
@@ -20,7 +22,9 @@ export class ClustersListComponent implements OnInit, OnChanges {
   @Output() deleteCluster = new EventEmitter<Cluster>();
   @ViewChild('table', { static: true }) table: DatatableComponent;
 
-  constructor() {}
+  constructor(
+    private clustersDataService: ClustersDataService
+  ) {}
 
   ngOnInit() {}
 
@@ -86,5 +90,19 @@ export class ClustersListComponent implements OnInit, OnChanges {
     }
     const d = new Date(date);
     return [pad(d.getDate()), pad(d.getMonth() + 1), d.getFullYear()].join('-');
+  }
+
+  exportPdf(cluster: Cluster) {
+    if (!cluster.id) return;
+    (cluster as any)._exporting = true;
+    this.clustersDataService.exportPdf(cluster.id).subscribe({
+      next: (blob) => {
+        saveAs(blob, `foyer_${cluster.name}.pdf`);
+        (cluster as any)._exporting = false;
+      },
+      error: () => {
+        (cluster as any)._exporting = false;
+      },
+    });
   }
 }

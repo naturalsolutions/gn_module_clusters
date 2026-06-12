@@ -12,3 +12,7 @@ class ClustersConfigSchema(Schema):
     DEFAULT_FILTERS = fields.Dict(load_default={})
     # Enable Leaflet marker clustering on the observation map
     ENABLE_LEAFLET_CLUSTER = fields.Boolean(load_default=True)
+    # Max observations in PDF export
+    OBSERVATIONS_LIMIT_PDF = fields.Integer(load_default=500)
+    # Gotenberg service for HTML to PDF conversion
+    GOTENBERG_URL = fields.String(load_default="http://localhost:3000")

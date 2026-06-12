@@ -1,1 +1,5 @@
-{}
+{
+  "ExportPdf": "Exporter en PDF",
+  "ExportingPdf": "Export en cours…",
+  "PdfExportError": "Erreur lors de l'export PDF"
+}

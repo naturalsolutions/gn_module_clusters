@@ -1,9 +1,12 @@
-from flask import Blueprint, request, g, jsonify, current_app
+from datetime import datetime
+
+from flask import Blueprint, request, g, jsonify, current_app, render_template
 from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer
 from utils_flask_sqla_geo.utils import geojsonify
-from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound
+from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServiceUnavailable
+import requests
 
 from geonature.utils.env import db
 from geonature.core.gn_permissions.decorators import (
@@ -13,6 +16,7 @@ from geonature.core.gn_permissions.decorators import (
 )
 from geonature.core.gn_permissions.tools import get_permissions, get_scope
 from geonature.core.gn_synthese.models import Synthese
+from geonature.core.gn_synthese.schemas import SyntheseSchema
 
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 from pypnusershub.db.models import User
@@ -23,7 +27,7 @@ from gn_module_clusters import MODULE_CODE
 from gn_module_clusters.models import Cluster, ObservarationCluster
 from gn_module_clusters.schemas import ClusterSchema
 
-blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__)
+blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__, template_folder="templates")
 
 
 @blueprint.record_once
@@ -384,7 +388,9 @@ def cluster_add_observation(id_cluster, id_observation, scope):
 
 
 @blueprint.route(rule="/<int:id_cluster>/observations/<int:id_observation>", methods=["DELETE"])
-@check_cruved_scope(action="U", module_code=MODULE_CODE, get_scope=True)
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
 def cluster_remove_observation(id_cluster, id_observation, scope):
     cluster = db.session.execute(
         sa.select(Cluster).where(Cluster.id == id_cluster)
@@ -412,3 +418,86 @@ def cluster_remove_observation(id_cluster, id_observation, scope):
     obs.associated_cluster = None
     db.session.commit()
     return "", 204
+
+
+@blueprint.route(rule="/<int:id_cluster>/export_pdf", methods=["POST"])
+@check_cruved_scope(
+    action="E", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
+def export_cluster_pdf(id_cluster, scope):
+    cluster = db.session.execute(
+        sa.select(Cluster)
+        .where(Cluster.id == id_cluster)
+        .options(
+            undefer(Cluster.geom_4326), undefer(Cluster.geom), undefer(Cluster.surface)
+        )  # FIXME:
+    ).scalar_one_or_none()
+    if not cluster:
+        raise NotFound
+    if not cluster.has_instance_permission(scope):
+        raise Forbidden
+
+    filters = (request.json or {}).get("filters", {})
+
+    obs_query = (
+        sa.select(Synthese)
+        .join(ObservarationCluster, ObservarationCluster.id_synthese == Synthese.id_synthese)
+        .where(ObservarationCluster.id_cluster == id_cluster)
+        .options(
+            sa.orm.joinedload(Synthese.taxref),
+            sa.orm.joinedload(Synthese.nomenclature_valid_status),
+        )
+    )
+
+    # FIXME: use synthese filters?
+    if filters.get("date_min"):
+        obs_query = obs_query.where(Synthese.date_min >= filters["date_min"])
+    if filters.get("date_max"):
+        obs_query = obs_query.where(Synthese.date_max <= filters["date_max"])
+    if filters.get("id_nomenclature_valid_status"):
+        obs_query = obs_query.where(
+            Synthese.id_nomenclature_valid_status == filters["id_nomenclature_valid_status"]
+        )
+
+    obs_limit = blueprint.config.get("OBSERVATIONS_LIMIT_PDF", 500)
+    obs_query = obs_query.order_by(Synthese.date_min.desc()).limit(obs_limit)
+    observations = db.session.execute(obs_query).scalars().all()
+
+    basemap = current_app.config["MAPCONFIG"]["BASEMAP"][0]  # FIXME: configurable basemap choice?
+    tile_url = basemap.get("url") or basemap.get("layer")
+    if tile_url.startswith("//"):
+        tile_url = "https:" + tile_url
+
+    html = render_template(
+        "cluster_export.html",
+        tile_url=tile_url,
+        cluster_geojson=ClusterSchema(as_geojson=True).dump(cluster),
+        obs_geojson=SyntheseSchema(as_geojson=True).dump(observations, many=True),
+        cluster=cluster,
+        observations=observations,
+        export_date=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+    files = {"files": ("index.html", html.encode("utf-8"), "text/html")}
+    data = {
+        "waitForSelector": ".leaflet-tile-loaded",
+        "waitDelay": "0.5s",
+        "marginTop": "1.5cm",
+        "marginBottom": "1.5cm",
+        "marginLeft": "1.5cm",
+        "marginRight": "1.5cm",
+        "printBackground": "true",
+        "failOnConsoleExceptions": "true",
+    }
+
+    gotenberg_url = blueprint.config["GOTENBERG_URL"]
+    resp = requests.post(
+        f"{gotenberg_url}/forms/chromium/convert/html",
+        files=files,
+        data=data,
+        timeout=30,
+    )
+    if not resp.ok:
+        raise ServiceUnavailable(f"Gotenberg error ({resp.status_code}): {resp.text[:500]}")
+
+    return current_app.response_class(resp.content, content_type="application/pdf")

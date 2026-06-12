@@ -75,4 +75,10 @@ export class ClustersDataService {
       params: selectors,
     });
   }
+
+  exportPdf(id: number, filters?: any): Observable<Blob> {
+    return this._http.post(`${this.CLUSTERS_API}/${id}/export_pdf`, { filters }, {
+      responseType: 'blob',
+    });
+  }
 }

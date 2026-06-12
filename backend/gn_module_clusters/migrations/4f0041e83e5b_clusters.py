@@ -236,6 +236,7 @@ def upgrade():
     id_action_read = conn.execute(sa.select(action).where(action.c.code_action == "R")).scalar()
     id_action_update = conn.execute(sa.select(action).where(action.c.code_action == "U")).scalar()
     id_action_delete = conn.execute(sa.select(action).where(action.c.code_action == "D")).scalar()
+    id_action_export = conn.execute(sa.select(action).where(action.c.code_action == "E")).scalar()
     permissions_available = sa.Table(
         "t_permissions_available", metadata, schema="gn_permissions", autoload_with=conn
     )
@@ -277,6 +278,16 @@ def upgrade():
                     "id_object": id_object_cluster,
                     "id_action": id_action_delete,
                     "label": "Supprimer des foyers d’envahissement",
+                    "scope_filter": True,
+                    "sensitivity_filter": False,
+                    "areas_filter": False,
+                    "taxons_filter": False,
+                },
+                {
+                    "id_module": id_module,
+                    "id_object": id_object_cluster,
+                    "id_action": id_action_export,
+                    "label": "Exporter des foyers d’envahissement",
                     "scope_filter": True,
                     "sensitivity_filter": False,
                     "areas_filter": False,

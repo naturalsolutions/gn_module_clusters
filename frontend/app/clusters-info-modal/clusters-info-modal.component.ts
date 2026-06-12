@@ -2,6 +2,7 @@ import { Component, Input, OnInit } from '@angular/core';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Cluster, formatSurface, getManagerName, getTaxonName } from '../models';
 import { ClustersDataService } from '../services/clusters-data.service';
+import { saveAs } from 'file-saver';
 
 @Component({
   selector: 'pnx-clusters-info-modal',
@@ -47,15 +48,19 @@ import { ClustersDataService } from '../services/clusters-data.service';
       </ng-template>
     </div>
     <div class="modal-footer">
+      <button type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
       <button type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
+      <button type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
       <button type="button" class="btn btn-secondary" (click)="activeModal.dismiss()">Fermer</button>
     </div>
   `,
 })
 export class ClustersInfoModalComponent implements OnInit {
   @Input() clusterId: number;
+  @Input() onCreateObs: () => void = () => { };
   cluster: Cluster;
   loading = true;
+  exporting = false;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -87,5 +92,19 @@ export class ClustersInfoModalComponent implements OnInit {
 
   edit() {
     this.activeModal.close(this.cluster);
+  }
+
+  exportPdf() {
+    if (!this.cluster?.id) return;
+    this.exporting = true;
+    this.clustersDataService.exportPdf(this.cluster.id).subscribe({
+      next: (blob) => {
+        saveAs(blob, `foyer_${this.cluster.name}.pdf`);
+        this.exporting = false;
+      },
+      error: () => {
+        this.exporting = false;
+      },
+    });
   }
 }

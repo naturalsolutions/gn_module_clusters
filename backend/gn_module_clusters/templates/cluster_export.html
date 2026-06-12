@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #map-wrapper { height: 400px; overflow: hidden; }
+    #map { width: 200%; height: 800px; transform: scale(0.5); transform-origin: top left; }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid px-2 py-1">
+  <h1 class="fw-bold text-primary mb-1">{{ cluster.name }}</h1>
+
+  <div id="map-wrapper" class="border rounded shadow-sm mb-2">
+    <div id="map"></div>
+  </div>
+
+  <script>
+    var map = L.map('map', { zoomControl: false, attributionControl: false, zoomAnimation: false });
+    L.tileLayer({{ tile_url | tojson }}, { maxZoom: 19 }).addTo(map);
+    var clusterGeom = {{ cluster_geojson | tojson }};
+    var clusterLayer = L.geoJSON(clusterGeom, {
+      style: { fillColor: '#ff3c3c', fillOpacity: 0.4, color: '#c81414', weight: 3 }
+    }).addTo(map);
+    var obsGeom = {{ obs_geojson | tojson }};
+    var obsLayer = null;
+    if (obsGeom && obsGeom.features && obsGeom.features.length > 0) {
+      obsLayer = L.geoJSON(obsGeom, {
+        pointToLayer: function(feature, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 5, fillColor: '#2864ff', fillOpacity: 0.86, color: '#2864ff', weight: 1
+          });
+        }
+      }).addTo(map);
+    }
+    var bounds = clusterLayer.getBounds();
+    if (obsLayer && obsLayer.getBounds().isValid()) {
+      bounds = bounds.extend(obsLayer.getBounds());
+    }
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.1));
+    }
+    window.status = 'ready';
+  </script>
+
+  <section class="mb-2">
+    <h2 class="h5 text-primary fw-bold mb-1">Informations</h2>
+    <dl class="row g-0">
+      <dt class="col-sm-3">ID :</dt>
+      <dd class="col-sm-9">{{ cluster.id }}</dd>
+      <dt class="col-sm-3">Taxon :</dt>
+      <dd class="col-sm-9">{{ cluster.taxref.nom_vern_or_lb_nom }}</dd>
+      <dt class="col-sm-3">Statut :</dt>
+      <dd class="col-sm-9">{{ cluster.status.label_default if cluster.status else '-' }}</dd>
+      <dt class="col-sm-3">État :</dt>
+      <dd class="col-sm-9">{{ cluster.yearly_state.label_default if cluster.yearly_state else '-' }}</dd>
+      <dt class="col-sm-3">Surface :</dt>
+      <dd class="col-sm-9">{% if cluster.surface %}{{ "%.2f"|format(cluster.surface / 10000) }} ha{% else %}-{% endif %}</dd>
+      <dt class="col-sm-3">Gestionnaire :</dt>
+      <dd class="col-sm-9">{{ cluster.manager.nom_complet }}</dd>
+      <dt class="col-sm-3">Création :</dt>
+      <dd class="col-sm-9">{% if cluster.created_on %}{{ cluster.created_on.strftime('%d/%m/%Y') }}{% else %}-{% endif %}</dd>
+      <dt class="col-sm-3">Observations :</dt>
+      <dd class="col-sm-9">{{ observations | length }}</dd>
+    </dl>
+  </section>
+
+  {% if cluster.notes %}
+  <div class="alert alert-warning border-start border-4 mb-2 py-2 px-3">
+    <h6 class="alert-heading mb-0 fs-6">Notes</h6>
+    <div class="small">{{ cluster.notes }}</div>
+  </div>
+  {% endif %}
+
+  <section class="mb-2">
+    <h2 class="h5 text-primary fw-bold mb-1">Observations <span class="badge bg-secondary">{{ observations | length }}</span></h2>
+    <div class="table-responsive">
+      <table class="table table-hover table-sm">
+        <thead class="table-primary">
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Taxon</th>
+            <th>Nb</th>
+            <th>Observateur(s)</th>
+            <th>Statut de validation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obs in observations %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{% if obs.date_min %}{{ obs.date_min.strftime('%d/%m/%Y') }}{% endif %}</td>
+            <td>{{ obs.taxref.nom_vern_or_lb_nom }}</td>
+            <td>{% if obs.count_max and obs.count_max != obs.count_min %}{{ obs.count_min }} - {{ obs.count_max }}{% else %}{{ obs.count_min }}{% endif %}</td>
+            <td>{{ obs.observers or '-' }}</td>
+            <td>{% if obs.nomenclature_valid_status %}{{ obs.nomenclature_valid_status.label_default or obs.nomenclature_valid_status.mnemonique }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<footer class="border-top text-center text-muted py-1 mt-1">
+  <small>Export généré le {{ export_date }}</small>
+</footer>
+
+</body>
+</html>
