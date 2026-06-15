@@ -1,59 +1,14 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { Cluster, formatSurface, getManagerName, getTaxonName } from '../models';
+import { ToastrService } from 'ngx-toastr';
+import { Cluster, Intervention, InterventionStatus, formatSurface, getManagerName, getTaxonName } from '../models';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { saveAs } from 'file-saver';
 
 @Component({
   selector: 'pnx-clusters-info-modal',
-  template: `
-    <div class="modal-header">
-      <h4 class="modal-title">{{ cluster?.name }}</h4>
-      <button type="button" class="close" (click)="activeModal.dismiss()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <ng-container *ngIf="!loading; else loadingTpl">
-        <dl class="row mb-0">
-          <dt class="col-sm-5">Taxon</dt>
-          <dd class="col-sm-7">{{ getTaxonName(cluster) }}</dd>
-
-          <dt class="col-sm-5">Statut</dt>
-          <dd class="col-sm-7">{{ cluster.status?.label_default || cluster.status?.mnemonique || '-' }}</dd>
-
-          <dt class="col-sm-5">État</dt>
-          <dd class="col-sm-7">{{ cluster.yearly_state?.label_default || cluster.yearly_state?.mnemonique || '-' }}</dd>
-
-          <dt class="col-sm-5">Surface</dt>
-          <dd class="col-sm-7">{{ formatSurface(cluster.surface) }}</dd>
-
-          <dt class="col-sm-5">Observations</dt>
-          <dd class="col-sm-7">{{ cluster.observations_count ?? '-' }}</dd>
-
-          <dt class="col-sm-5">Gestionnaire</dt>
-          <dd class="col-sm-7">{{ getManagerName(cluster) }}</dd>
-
-          <dt class="col-sm-5">Date de création</dt>
-          <dd class="col-sm-7">{{ (cluster.created_on | date:'dd/MM/yyyy') || '-' }}</dd>
-
-          <dt class="col-sm-5">Notes</dt>
-          <dd class="col-sm-7">{{ cluster.notes || '-' }}</dd>
-        </dl>
-      </ng-container>
-      <ng-template #loadingTpl>
-        <div class="text-center py-3">
-          <div class="spinner-border" role="status">
-            <span class="sr-only">Chargement...</span>
-          </div>
-        </div>
-      </ng-template>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
-      <button type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
-      <button type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
-      <button type="button" class="btn btn-secondary" (click)="activeModal.dismiss()">Fermer</button>
-    </div>
-  `,
+  templateUrl: './clusters-info-modal.component.html',
+  styleUrls: ['./clusters-info-modal.component.scss'],
 })
 export class ClustersInfoModalComponent implements OnInit {
   @Input() clusterId: number;
@@ -61,9 +16,15 @@ export class ClustersInfoModalComponent implements OnInit {
   cluster: Cluster;
   loading = true;
   exporting = false;
+  interventionStatuses: InterventionStatus[] = [];
+  showForm = false;
+  editingIntervention: Intervention | null = null;
+  saving = false;
+  formData: any = {};
 
   constructor(
     public activeModal: NgbActiveModal,
+    private toastrService: ToastrService,
     private clustersDataService: ClustersDataService
   ) { }
 
@@ -72,6 +33,11 @@ export class ClustersInfoModalComponent implements OnInit {
       this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
         this.cluster = feature.properties as Cluster;
         this.loading = false;
+        this.clustersDataService
+          .getInterventionStatuses(this.cluster.cd_nom)
+          .subscribe((statuses) => {
+            this.interventionStatuses = statuses;
+          });
       });
     } else {
       this.loading = false;
@@ -104,6 +70,73 @@ export class ClustersInfoModalComponent implements OnInit {
       },
       error: () => {
         this.exporting = false;
+      },
+    });
+  }
+
+  showAddForm() {
+    this.editingIntervention = null;
+    this.formData = { operator_name: '', intervention_date: '', status_id: '', status_custom: '', notes: '' };
+    this.showForm = true;
+  }
+
+  editIntervention(intervention: Intervention) {
+    this.editingIntervention = intervention;
+    this.formData = {
+      operator_name: intervention.operator_name || intervention.operator?.nom_complet || '',
+      intervention_date: intervention.intervention_date ? intervention.intervention_date.substring(0, 10) : '',
+      status_id: intervention.status_id || null,
+      status_custom: intervention.status_custom || '',
+      notes: intervention.notes || '',
+    };
+    this.showForm = true;
+  }
+
+  deleteIntervention(intervention: Intervention) {
+    if (!window.confirm(`Supprimer l'intervention #${intervention.id} ?`)) return;
+    this.clustersDataService.deleteIntervention(this.cluster.id, intervention.id).subscribe({
+      next: () => {
+        this.toastrService.success('Intervention supprimée');
+        this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
+          this.cluster = feature.properties as Cluster;
+        });
+      },
+    });
+  }
+
+  cancelForm() {
+    this.showForm = false;
+    this.editingIntervention = null;
+  }
+
+  saveIntervention() {
+    this.saving = true;
+    const data: any = {
+      operator_name: this.formData.operator_name || null,
+      intervention_date: this.formData.intervention_date ? `${this.formData.intervention_date}T12:00:00` : null,
+      notes: this.formData.notes || null,
+    };
+    if (this.formData.status_id === null) {
+      data.status_custom = this.formData.status_custom || null;
+    } else {
+      data.status_id = this.formData.status_id;
+    }
+
+    const request = this.editingIntervention
+      ? this.clustersDataService.updateIntervention(this.cluster.id, this.editingIntervention.id, data)
+      : this.clustersDataService.createIntervention(this.cluster.id, data);
+
+    request.subscribe({
+      next: () => {
+        this.saving = false;
+        this.showForm = false;
+        this.editingIntervention = null;
+        this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
+          this.cluster = feature.properties as Cluster;
+        });
+      },
+      error: () => {
+        this.saving = false;
       },
     });
   }

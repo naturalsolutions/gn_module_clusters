@@ -105,6 +105,34 @@
       </table>
     </div>
   </section>
+
+  <section class="mb-2">
+    <h2 class="h5 text-primary fw-bold mb-1">Interventions <span class="badge bg-secondary">{{ interventions | length }}</span></h2>
+    <div class="table-responsive">
+      <table class="table table-hover table-sm">
+        <thead class="table-primary">
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Opérateur</th>
+            <th>Statut</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for intervention in interventions %}
+          <tr>
+            <td>{{ intervention.id }}</td>
+            <td>{% if intervention.intervention_date %}{{ intervention.intervention_date.strftime('%d/%m/%Y') }}{% endif %}</td>
+            <td>{{ intervention.operator_name or (intervention.operator.nom_complet if intervention.operator else '-') }}</td>
+            <td>{{ intervention.status.label if intervention.status else intervention.status_custom or '-' }}</td>
+            <td>{{ intervention.notes or '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>
 
 <footer class="border-top text-center text-muted py-1 mt-1">

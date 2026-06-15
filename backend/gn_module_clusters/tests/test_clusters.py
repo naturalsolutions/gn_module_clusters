@@ -14,7 +14,12 @@ from geonature.tests.utils import set_logged_user
 from ref_geo.models import LAreas, BibAreasTypes
 from apptax.taxonomie.models import Taxref, TaxrefTree
 
-from gn_module_clusters.models import Cluster, ObservarationCluster
+from gn_module_clusters.models import (
+    Cluster,
+    Intervention,
+    InterventionStatus,
+    ObservarationCluster,
+)
 
 
 @pytest.fixture()
@@ -250,6 +255,7 @@ class TestClusters:
         assert "surface" in r.json, r.data
         assert "notes" in r.json, r.data
         assert "cruved" in r.json, r.data
+        assert "interventions" in r.json, r.data
 
     def test_create_cluster_permissions(self, users, remove_existing_clusters):
         url = url_for("clusters.create_cluster")
@@ -887,3 +893,305 @@ class TestClusters:
         assert r.status_code == 204, r.data
         db.session.refresh(synthese_data["obs2"])
         assert synthese_data["obs2"].cluster == None
+
+
+@pytest.mark.usefixtures("client_class", "temporary_transaction")
+class TestInterventions:
+    def test_list_intervention_status(self, users):
+        r = self.client.get(url_for("clusters.list_intervention_status"))
+        assert r.status_code == Unauthorized.code, r.data
+
+        set_logged_user(self.client, users["admin_user"])
+
+        cd_nom = db.session.scalar(sa.select(Taxref.cd_nom))
+        with db.session.begin_nested():
+            status1 = InterventionStatus(label="Status A", cd_nom=cd_nom)
+            status2 = InterventionStatus(label="Status B", cd_nom=cd_nom)
+            db.session.add_all([status1, status2])
+
+        r = self.client.get(url_for("clusters.list_intervention_status"))
+        assert r.status_code == 200, r.data
+        assert len(r.json) >= 2
+        labels = [s["label"] for s in r.json]
+        assert "Status A" in labels
+        assert "Status B" in labels
+
+    def test_list_intervention_status_cd_nom(self, users):
+        set_logged_user(self.client, users["admin_user"])
+
+        faucons = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 192519))
+        faucon_pelerin = db.session.scalar(sa.select(Taxref).where(Taxref.cd_nom == 2938))
+        assert all([faucons, faucon_pelerin])
+
+        with db.session.begin_nested():
+            broad = InterventionStatus(label="Rapaces", cd_nom=faucons.cd_nom)
+            narrow = InterventionStatus(label="Faucon pèlerin", cd_nom=faucon_pelerin.cd_nom)
+            db.session.add_all([broad, narrow])
+
+        # Filter by a descendant → both the ancestor status and the matching one are returned
+        r = self.client.get(
+            url_for("clusters.list_intervention_status", cd_nom=faucon_pelerin.cd_nom)
+        )
+        assert r.status_code == 200, r.data
+        labels = [s["label"] for s in r.json]
+        assert "Rapaces" in labels
+        assert "Faucon pèlerin" in labels
+
+        # Filter by the broad taxon → only the ancestor status is returned
+        r = self.client.get(url_for("clusters.list_intervention_status", cd_nom=faucons.cd_nom))
+        assert r.status_code == 200, r.data
+        labels = [s["label"] for s in r.json]
+        assert "Rapaces" in labels
+        assert "Faucon pèlerin" not in labels
+
+        # Invalid cd_nom → 400
+        r = self.client.get(url_for("clusters.list_intervention_status", cd_nom=-1))
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_create_intervention_permissions(self, users, clusters):
+        url = url_for("clusters.cluster_create_intervention", id_cluster=clusters["c1"].id)
+
+        r = self.client.post(url, json={"operator_id": 1, "intervention_date": "2026-06-15"})
+        assert r.status_code == Unauthorized.code, r.data
+
+        set_logged_user(self.client, users["noright_user"])
+        r = self.client.post(url, json={"operator_id": 1, "intervention_date": "2026-06-15"})
+        assert r.status_code == Forbidden.code, r.data
+
+        # Create for a cluster we don't own → Forbidden
+        url_other = url_for("clusters.cluster_create_intervention", id_cluster=clusters["c2"].id)
+        r = self.client.post(
+            url_other,
+            json={
+                "operator_id": users["admin_user"].id_role,
+                "intervention_date": "2026-06-15T10:00:00",
+            },
+        )
+        assert r.status_code == Forbidden.code, r.data
+
+    def test_create_intervention_fields(self, users, clusters):
+        set_logged_user(self.client, users["self_user"])
+        url = url_for("clusters.cluster_create_intervention", id_cluster=clusters["c1"].id)
+
+        cd_nom = db.session.scalar(sa.select(Taxref.cd_nom))
+        with db.session.begin_nested():
+            status = InterventionStatus(label="Test", cd_nom=cd_nom)
+            db.session.add(status)
+
+        r = self.client.post(
+            url,
+            json={
+                "operator_id": users["admin_user"].id_role,
+                "intervention_date": "2026-06-15T10:00:00",
+                "status_id": status.id,
+                "notes": "Some notes",
+            },
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["operator_id"] == users["admin_user"].id_role
+        assert r.json["status_id"] == status.id
+        assert r.json["requestor_id"] == users["self_user"].id_role
+        assert r.json["notes"] == "Some notes"
+
+        # Create with status_custom instead of status_id
+        r = self.client.post(
+            url,
+            json={
+                "operator_id": users["admin_user"].id_role,
+                "intervention_date": "2026-06-15T10:00:00",
+                "status_custom": "Custom status",
+            },
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["status_custom"] == "Custom status"
+        assert r.json["status_id"] is None
+
+        # Both status_id and status_custom → 400
+        r = self.client.post(
+            url,
+            json={
+                "operator_id": users["admin_user"].id_role,
+                "intervention_date": "2026-06-15T10:00:00",
+                "status_id": status.id,
+                "status_custom": "Custom",
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+        # Create with operator_name instead of operator_id
+        r = self.client.post(
+            url,
+            json={
+                "operator_name": "John Doe",
+                "intervention_date": "2026-06-15T10:00:00",
+                "status_custom": "Test",
+            },
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["operator_name"] == "John Doe"
+        assert r.json["operator_id"] is None
+
+        # Both operator_id and operator_name → 400
+        r = self.client.post(
+            url,
+            json={
+                "operator_id": users["admin_user"].id_role,
+                "operator_name": "John Doe",
+                "intervention_date": "2026-06-15T10:00:00",
+                "status_custom": "Test",
+            },
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_update_intervention_permissions(self, users, clusters):
+        with db.session.begin_nested():
+            intervention = Intervention(
+                cluster=clusters["c1"],
+                requestor=users["self_user"],
+                operator=users["admin_user"],
+                intervention_date=sa.func.now(),
+                status_custom="Initial",
+            )
+            db.session.add(intervention)
+
+        url = url_for(
+            "clusters.cluster_update_intervention",
+            id_cluster=clusters["c1"].id,
+            id_intervention=intervention.id,
+        )
+
+        r = self.client.post(url, json={"notes": "Updated notes"})
+        assert r.status_code == Unauthorized.code, r.data
+
+        set_logged_user(self.client, users["noright_user"])
+        r = self.client.post(url, json={"notes": "Updated notes"})
+        assert r.status_code == Forbidden.code, r.data
+
+        set_logged_user(self.client, users["stranger_user"])
+        # Update on a cluster we don't own → Forbidden
+        url_other = url_for(
+            "clusters.cluster_update_intervention",
+            id_cluster=clusters["c2"].id,
+            id_intervention=intervention.id,
+        )
+        r = self.client.post(
+            url_other,
+            json={"notes": "Notes"},
+        )
+        assert r.status_code == Forbidden.code, r.data
+
+    def test_update_intervention_fields(self, users, clusters):
+        set_logged_user(self.client, users["self_user"])
+
+        cd_nom = db.session.scalar(sa.select(Taxref.cd_nom))
+        with db.session.begin_nested():
+            status = InterventionStatus(label="Test", cd_nom=cd_nom)
+            db.session.add(status)
+            intervention = Intervention(
+                cluster=clusters["c1"],
+                requestor=users["self_user"],
+                operator=users["admin_user"],
+                intervention_date=sa.func.now(),
+                status_custom="Initial",
+            )
+            db.session.add(intervention)
+
+        url = url_for(
+            "clusters.cluster_update_intervention",
+            id_cluster=clusters["c1"].id,
+            id_intervention=intervention.id,
+        )
+
+        # Update operator and notes
+        r = self.client.post(
+            url,
+            json={
+                "operator_id": users["associate_user"].id_role,
+                "notes": "Updated notes",
+            },
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["operator_id"] == users["associate_user"].id_role
+        assert r.json["notes"] == "Updated notes"
+        assert r.json["status_custom"] == "Initial"
+        assert r.json["status_id"] is None
+
+        # Switch to status_id → status_custom should be cleared
+        r = self.client.post(
+            url,
+            json={"status_id": status.id},
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["status_id"] == status.id
+        assert r.json["status_custom"] is None
+
+        # Switch back to status_custom → status_id should be cleared
+        r = self.client.post(
+            url,
+            json={"status_custom": "New custom"},
+        )
+        assert r.status_code == 200, r.data
+        assert r.json["status_custom"] == "New custom"
+        assert r.json["status_id"] is None
+
+        # Both status_id and status_custom → 400
+        r = self.client.post(
+            url,
+            json={"status_id": status.id, "status_custom": "Both"},
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+        # Switch to operator_name → operator_id should be cleared
+        r = self.client.post(url, json={"operator_name": "Jane Doe"})
+        assert r.status_code == 200, r.data
+        assert r.json["operator_name"] == "Jane Doe"
+        assert r.json["operator_id"] is None
+
+        # Switch back to operator_id → operator_name should be cleared
+        r = self.client.post(url, json={"operator_id": users["admin_user"].id_role})
+        assert r.status_code == 200, r.data
+        assert r.json["operator_id"] == users["admin_user"].id_role
+        assert r.json["operator_name"] is None
+
+        # Both operator_id and operator_name → 400
+        r = self.client.post(
+            url,
+            json={"operator_id": users["associate_user"].id_role, "operator_name": "Both"},
+        )
+        assert r.status_code == BadRequest.code, r.data
+
+    def test_remove_intervention(self, users, clusters):
+        with db.session.begin_nested():
+            intervention = Intervention(
+                cluster=clusters["c1"],
+                requestor=users["self_user"],
+                operator=users["admin_user"],
+                intervention_date=sa.func.now(),
+                status_custom="To delete",
+            )
+            db.session.add(intervention)
+
+        url = url_for(
+            "clusters.cluster_remove_intervention",
+            id_cluster=clusters["c1"].id,
+            id_intervention=intervention.id,
+        )
+
+        # Unauthorized
+        r = self.client.delete(url)
+        assert r.status_code == Unauthorized.code, r.data
+        assert db.session.scalar(sa.select(sa.exists().where(Intervention.id == intervention.id)))
+
+        # Forbidden: user without rights on this cluster
+        set_logged_user(self.client, users["stranger_user"])
+        r = self.client.delete(url)
+        assert r.status_code == Forbidden.code, r.data
+        assert db.session.scalar(sa.select(sa.exists().where(Intervention.id == intervention.id)))
+
+        # Success: cluster owner
+        set_logged_user(self.client, users["self_user"])
+        r = self.client.delete(url)
+        assert r.status_code == 204, r.data
+        assert not db.session.scalar(
+            sa.select(sa.exists().where(Intervention.id == intervention.id))
+        )

@@ -102,6 +102,7 @@
     name="Observations"
     prop="observations_count"
     [sortable]="true"
+    [maxWidth]="120"
   >
     <ng-template
       let-row="row"
@@ -116,6 +117,20 @@
         matTooltip="Afficher/masquer les observations de ce foyer"
       ></i>
       {{ row.observations_count }}
+    </ng-template>
+  </ngx-datatable-column>
+
+  <ngx-datatable-column
+    name="Interventions"
+    prop="interventions_count"
+    [sortable]="true"
+    [maxWidth]="120"
+  >
+    <ng-template
+      let-row="row"
+      ngx-datatable-cell-template
+    >
+      {{ row.interventions_count }}
     </ng-template>
   </ngx-datatable-column>
 

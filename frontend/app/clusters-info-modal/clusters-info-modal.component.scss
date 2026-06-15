@@ -1,0 +1,26 @@
+:host ::ng-deep .datatable-body-row {
+  height: 30px !important;
+}
+
+:host ::ng-deep .datatable-header-cell {
+  padding-left: 15px !important;
+}
+
+:host ::ng-deep .datatable-body-cell {
+  font-size: 12px !important;
+  padding-bottom: 15px !important;
+  padding-top: 8px !important;
+  padding-left: 15px !important;
+}
+
+:host ::ng-deep .datatable-body-cell i {
+  font-size: 12px;
+}
+
+ngx-datatable {
+  box-shadow: none !important;
+}
+
+:host ::ng-deep .datatable-body-cell a {
+  cursor: pointer;
+}

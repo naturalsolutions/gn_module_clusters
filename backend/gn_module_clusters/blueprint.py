@@ -5,6 +5,7 @@ from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer
 from utils_flask_sqla_geo.utils import geojsonify
+from marshmallow import ValidationError
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServiceUnavailable
 import requests
 
@@ -23,9 +24,16 @@ from pypnusershub.db.models import User
 from pypnusershub.schemas import UserSchema
 from apptax.taxonomie.models import TaxrefTree
 
+import gn_module_clusters.admin  # noqa: F401
+
 from gn_module_clusters import MODULE_CODE
-from gn_module_clusters.models import Cluster, ObservarationCluster
-from gn_module_clusters.schemas import ClusterSchema
+from gn_module_clusters.models import (
+    Cluster,
+    Intervention,
+    InterventionStatus,
+    ObservarationCluster,
+)
+from gn_module_clusters.schemas import ClusterSchema, InterventionSchema, InterventionStatusSchema
 
 blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__, template_folder="templates")
 
@@ -77,7 +85,7 @@ def check_cluster_name(cluster):
 def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    only += ["manager", "taxref", "status", "yearly_state", "+cruved"]
+    only += ["manager", "taxref", "status", "yearly_state", "+cruved", "+interventions_count"]
     if request.args.get("observations_count"):
         only += ["+observations_count"]
     data = ClusterSchema(only=only, as_geojson=as_geojson).dump(*args, **kwargs)
@@ -203,7 +211,11 @@ def get_cluster(id_cluster, scope):
         raise NotFound
     if not cluster.has_instance_permission(scope):
         raise Forbidden
-    return dump(cluster, as_geojson=as_geojson, only=["+surface", "+notes"])
+    return dump(
+        cluster,
+        as_geojson=as_geojson,
+        only=["+surface", "+notes", "+interventions", "+interventions.status"],
+    )
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["POST"])
@@ -420,6 +432,145 @@ def cluster_remove_observation(id_cluster, id_observation, scope):
     return "", 204
 
 
+@blueprint.route(rule="/intervention-status", methods=["GET"])
+@login_required
+def list_intervention_status():
+    """
+    Return the list of intervention status.
+    If a cd_nom is provided, filter the list with status valid for this cd_nom.
+    A status is valid for a cd_nom if the status cd_nom is a parent.
+    """
+    stmt = sa.select(InterventionStatus).order_by(InterventionStatus.label)
+    cd_nom = request.args.get("cd_nom", type=int)
+    if cd_nom:
+        given_tree = db.session.get(TaxrefTree, cd_nom)
+        if not given_tree:
+            raise BadRequest(f"cd_nom {cd_nom} not found")
+        stmt = stmt.outerjoin(TaxrefTree, TaxrefTree.cd_nom == InterventionStatus.cd_nom).where(
+            sa.or_(
+                TaxrefTree.path.op("@>")(given_tree.path),
+                InterventionStatus.cd_nom.is_(None),
+            )
+        )
+    statuses = db.session.scalars(stmt).all()
+    return jsonify(InterventionStatusSchema(many=True).dump(statuses))
+
+
+@blueprint.route(rule="/<int:id_cluster>/interventions/", methods=["POST"])
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
+def cluster_create_intervention(id_cluster, scope):
+    cluster = db.session.execute(
+        sa.select(Cluster).where(Cluster.id == id_cluster)
+    ).scalar_one_or_none()
+    if not cluster:
+        raise NotFound("Cluster not found")
+    if not cluster.has_instance_permission(scope):
+        raise Forbidden("You have no rights on this cluster")
+
+    schema = InterventionSchema(
+        only=(
+            "operator_id",
+            "operator_name",
+            "intervention_date",
+            "status_id",
+            "status_custom",
+            "notes",
+        ),
+        load_instance=True,
+        session=db.session,
+    )
+    try:
+        intervention = schema.load(request.json)
+    except ValidationError as e:
+        raise BadRequest(e.messages)
+
+    intervention.cluster = cluster
+    intervention.requestor = g.current_user
+    if intervention.intervention_date is None:
+        intervention.intervention_date = sa.func.now()
+    db.session.add(intervention)
+    db.session.commit()
+    return jsonify(InterventionSchema().dump(intervention))
+
+
+@blueprint.route(rule="/<int:id_cluster>/interventions/<int:id_intervention>", methods=["POST"])
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
+def cluster_update_intervention(id_cluster, id_intervention, scope):
+    cluster = db.session.execute(
+        sa.select(Cluster).where(Cluster.id == id_cluster)
+    ).scalar_one_or_none()
+    if not cluster:
+        raise NotFound("Cluster not found")
+    if not cluster.has_instance_permission(scope):
+        raise Forbidden("You have no rights on this cluster")
+
+    intervention = db.session.execute(
+        sa.select(Intervention).where(
+            Intervention.id == id_intervention, Intervention.cluster_id == id_cluster
+        )
+    ).scalar_one_or_none()
+    if not intervention:
+        raise NotFound("Intervention not found")
+
+    schema = InterventionSchema(
+        only=(
+            "operator_id",
+            "operator_name",
+            "intervention_date",
+            "status_id",
+            "status_custom",
+            "notes",
+        ),
+        load_instance=True,
+        partial=True,
+        session=db.session,
+    )
+    try:
+        schema.load(request.json, instance=intervention)
+    except ValidationError as e:
+        raise BadRequest(e.messages)
+    if request.json.get("status_id") is not None:
+        intervention.status_custom = None
+    if request.json.get("status_custom") is not None:
+        intervention.status_id = None
+    if request.json.get("operator_id") is not None:
+        intervention.operator_name = None
+    if request.json.get("operator_name") is not None:
+        intervention.operator_id = None
+    db.session.commit()
+    return jsonify(InterventionSchema().dump(intervention))
+
+
+@blueprint.route(rule="/<int:id_cluster>/interventions/<int:id_intervention>", methods=["DELETE"])
+@check_cruved_scope(
+    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
+)
+def cluster_remove_intervention(id_cluster, id_intervention, scope):
+    cluster = db.session.execute(
+        sa.select(Cluster).where(Cluster.id == id_cluster)
+    ).scalar_one_or_none()
+    if not cluster:
+        raise NotFound("Cluster not found")
+    if not cluster.has_instance_permission(scope):
+        raise Forbidden("You have no rights on this cluster")
+
+    intervention = db.session.execute(
+        sa.select(Intervention).where(
+            Intervention.id == id_intervention, Intervention.cluster_id == id_cluster
+        )
+    ).scalar_one_or_none()
+    if not intervention:
+        raise NotFound("Intervention not found")
+
+    db.session.delete(intervention)
+    db.session.commit()
+    return "", 204
+
+
 @blueprint.route(rule="/<int:id_cluster>/export_pdf", methods=["POST"])
 @check_cruved_scope(
     action="E", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
@@ -463,6 +614,13 @@ def export_cluster_pdf(id_cluster, scope):
     obs_query = obs_query.order_by(Synthese.date_min.desc()).limit(obs_limit)
     observations = db.session.execute(obs_query).scalars().all()
 
+    interventions = db.session.scalars(
+        sa.select(Intervention)
+        .where(Intervention.cluster_id == id_cluster)
+        .options(sa.orm.joinedload(Intervention.requestor), sa.orm.joinedload(Intervention.status))
+        .order_by(Intervention.intervention_date.desc())
+    ).all()
+
     basemap = current_app.config["MAPCONFIG"]["BASEMAP"][0]  # FIXME: configurable basemap choice?
     tile_url = basemap.get("url") or basemap.get("layer")
     if tile_url.startswith("//"):
@@ -475,6 +633,7 @@ def export_cluster_pdf(id_cluster, scope):
         obs_geojson=SyntheseSchema(as_geojson=True).dump(observations, many=True),
         cluster=cluster,
         observations=observations,
+        interventions=interventions,
         export_date=datetime.now().strftime("%d/%m/%Y %H:%M"),
     )
 

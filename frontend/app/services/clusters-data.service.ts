@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { ConfigService } from '@geonature/services/config.service';
 import { Observable } from 'rxjs';
-import { Cluster, ClusterFeature } from '../models';
+import { Cluster, ClusterFeature, Intervention } from '../models';
 
 const GEOJSON_CONTENT_TYPE = new HttpHeaders({ 'Content-Type': 'application/geo+json' });
 const GEOJSON_ACCEPT = new HttpHeaders({ 'Accept': 'application/geo+json' });
@@ -80,5 +80,25 @@ export class ClustersDataService {
     return this._http.post(`${this.CLUSTERS_API}/${id}/export_pdf`, { filters }, {
       responseType: 'blob',
     });
+  }
+
+  getInterventionStatuses(cdNom?: number): Observable<any[]> {
+    let params = new HttpParams();
+    if (cdNom != null) {
+      params = params.set('cd_nom', cdNom);
+    }
+    return this._http.get<any[]>(`${this.CLUSTERS_API}/intervention-status`, { params });
+  }
+
+  createIntervention(idCluster: number, data: Partial<Intervention>): Observable<Intervention> {
+    return this._http.post<Intervention>(`${this.CLUSTERS_API}/${idCluster}/interventions/`, data);
+  }
+
+  updateIntervention(idCluster: number, idIntervention: number, data: Partial<Intervention>): Observable<Intervention> {
+    return this._http.post<Intervention>(`${this.CLUSTERS_API}/${idCluster}/interventions/${idIntervention}`, data);
+  }
+
+  deleteIntervention(idCluster: number, idIntervention: number): Observable<void> {
+    return this._http.delete<void>(`${this.CLUSTERS_API}/${idCluster}/interventions/${idIntervention}`);
   }
 }

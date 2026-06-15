@@ -20,8 +20,32 @@ export interface Cluster {
   manager_id?: number;
   created_on?: string;
   observations_count?: number;
+  interventions_count?: number;
   surface?: number;
   cruved?: Cruved;
+  interventions?: Intervention[];
+}
+
+export interface InterventionStatus {
+  id?: number;
+  label: string;
+  cd_nom: number;
+}
+
+export interface Intervention {
+  id?: number;
+  cluster_id?: number;
+  requestor?: Role;
+  requestor_id?: number;
+  operator?: Role;
+  operator_id?: number;
+  operator_name?: string | null;
+  request_date?: string;
+  intervention_date?: string;
+  status_id?: number | null;
+  status?: any | null;
+  status_custom?: string | null;
+  notes?: string | null;
 }
 
 export function getTaxonName(cluster: Cluster): string {

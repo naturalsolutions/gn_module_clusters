@@ -1,0 +1,148 @@
+<div class="modal-header">
+  <h4 class="modal-title">{{ cluster?.name }}</h4>
+  <button type="button" class="close" (click)="activeModal.dismiss()">&times;</button>
+</div>
+<div class="modal-body">
+  <ng-container *ngIf="!loading; else loadingTpl">
+    <ul ngbNav #nav="ngbNav" class="nav-tabs" [destroyOnHide]="false">
+      <li ngbNavItem>
+        <a ngbNavLink>Détails</a>
+        <ng-template ngbNavContent>
+          <dl class="row mb-0 mt-2">
+            <dt class="col-sm-5">Taxon</dt>
+            <dd class="col-sm-7">{{ getTaxonName(cluster) }}</dd>
+
+            <dt class="col-sm-5">Statut</dt>
+            <dd class="col-sm-7">{{ cluster.status?.label_default || cluster.status?.mnemonique || '-' }}</dd>
+
+            <dt class="col-sm-5">État</dt>
+            <dd class="col-sm-7">{{ cluster.yearly_state?.label_default || cluster.yearly_state?.mnemonique || '-' }}</dd>
+
+            <dt class="col-sm-5">Surface</dt>
+            <dd class="col-sm-7">{{ formatSurface(cluster.surface) }}</dd>
+
+            <dt class="col-sm-5">Observations</dt>
+            <dd class="col-sm-7">{{ cluster.observations_count ?? '-' }}</dd>
+
+            <dt class="col-sm-5">Gestionnaire</dt>
+            <dd class="col-sm-7">{{ getManagerName(cluster) }}</dd>
+
+            <dt class="col-sm-5">Date de création</dt>
+            <dd class="col-sm-7">{{ (cluster.created_on | date:'dd/MM/yyyy') || '-' }}</dd>
+
+            <dt class="col-sm-5">Notes</dt>
+            <dd class="col-sm-7">{{ cluster.notes || '-' }}</dd>
+          </dl>
+        </ng-template>
+      </li>
+      <li ngbNavItem>
+        <a ngbNavLink>Interventions</a>
+        <ng-template ngbNavContent>
+          <div class="mt-2">
+            <div class="d-flex justify-content-end align-items-center mb-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-success"
+                (click)="showAddForm()">
+                Ajouter une intervention
+              </button>
+            </div>
+
+            <ngx-datatable
+              class="material striped margin-top-xs table-size"
+              [rows]="cluster.interventions"
+              [columnMode]="'force'"
+              [headerHeight]="50"
+              [reorderable]="true"
+              [sorts]="[{ prop: 'id', dir: 'desc' }]"
+            >
+              <ngx-datatable-column [maxWidth]="60" [sortable]="false">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  <a class="link-dark" (click)="editIntervention(row); $event.stopPropagation()" matTooltip="Modifier">
+                    <i class="fa fa-pencil"></i>
+                  </a>
+                  <a class="link-dark ml-1" (click)="deleteIntervention(row); $event.stopPropagation()" matTooltip="Supprimer">
+                    <i class="fa fa-trash"></i>
+                  </a>
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="#" prop="id" [maxWidth]="60" [sortable]="true">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.id }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Date" prop="intervention_date" [maxWidth]="120" [sortable]="true">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ (row.intervention_date | date:'dd/MM/yyyy') || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Opérateur" [sortable]="true" [flexGrow]="1">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.operator_name || row.operator?.nom_complet || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Statut" [sortable]="true" [flexGrow]="1">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.status?.label || row.status_custom || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Notes" [sortable]="true" [flexGrow]="1">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.notes || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+            </ngx-datatable>
+
+            <div *ngIf="showForm" class="card card-body bg-light">
+              <h6 class="card-title">{{ editingIntervention ? 'Modifier' : 'Ajouter' }} une intervention</h6>
+              <form (ngSubmit)="saveIntervention()">
+                <div class="mb-2">
+                  <label class="form-label">Opérateur</label>
+                  <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.operator_name" name="operator_name" required>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Date d'intervention</label>
+                  <input type="date" class="form-control form-control-sm" [(ngModel)]="formData.intervention_date" name="intervention_date" required>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Statut</label>
+                   <select class="form-control form-control-sm" [(ngModel)]="formData.status_id" name="status_id" [required]="formData.status_id !== null">
+                     <option value="" disabled hidden>Choisir un statut</option>
+                     <option *ngFor="let s of interventionStatuses" [ngValue]="s.id">{{ s.label }}</option>
+                     <option [ngValue]="null">Autre</option>
+                   </select>
+                </div>
+                <div class="mb-2" *ngIf="formData.status_id === null">
+                  <label class="form-label">Statut personnalisé</label>
+                   <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.status_custom" name="status_custom" [required]="formData.status_id === null">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Notes</label>
+                  <textarea class="form-control form-control-sm" rows="2" [(ngModel)]="formData.notes" name="notes"></textarea>
+                </div>
+                <div class="d-flex justify-content-end">
+                  <button type="submit" class="btn btn-sm btn-success" [disabled]="saving">{{ saving ? 'Enregistrement...' : 'Enregistrer' }}</button>
+                  <button type="button" class="btn btn-sm btn-secondary ml-2" (click)="cancelForm()">Annuler</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </ng-template>
+      </li>
+    </ul>
+    <div [ngbNavOutlet]="nav" class="mt-2"></div>
+  </ng-container>
+  <ng-template #loadingTpl>
+    <div class="text-center py-3">
+      <div class="spinner-border" role="status">
+        <span class="sr-only">Chargement...</span>
+      </div>
+    </div>
+  </ng-template>
+</div>
+<div class="modal-footer">
+  <button type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
+  <button type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
+  <button type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
+  <button type="button" class="btn btn-secondary" (click)="activeModal.dismiss()">Fermer</button>
+</div>

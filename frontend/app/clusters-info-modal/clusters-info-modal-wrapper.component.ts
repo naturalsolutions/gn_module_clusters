@@ -41,7 +41,7 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
       this.storeService.selectCluster$.next(clusterId);
 
       this.currentDialog = this.modalService.open(ClustersInfoModalComponent, {
-        size: 'lg',
+        size: 'xl',
       });
       this.currentDialog.componentInstance.clusterId = clusterId;
 
