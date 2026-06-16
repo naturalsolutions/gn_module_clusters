@@ -7,11 +7,14 @@ export class ObservationLayerService {
   constructor(private config: ConfigService) {}
 
   createGroup(): L.LayerGroup {
-    return this.config.CLUSTERS?.ENABLE_LEAFLET_CLUSTER
-      ? (L as any).markerClusterGroup({
-          iconCreateFunction: this.clusterIcon,
-        })
-      : new L.FeatureGroup();
+    const maxZoom = this.config.CLUSTERS?.LEAFLET_CLUSTER_MAX_ZOOM;
+    if (maxZoom) {
+      return (L as any).markerClusterGroup({
+        disableClusteringAtZoom: maxZoom,
+        iconCreateFunction: this.clusterIcon,
+      });
+    }
+    return new L.FeatureGroup();
   }
 
   buildGeoJsonLayer(
