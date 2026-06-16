@@ -24,6 +24,7 @@ export class ClustersCreateFormComponent {
   @Input() waiting = false;
   @Input() isEditing = false;
   @Input() users: any[] = [];
+  @Input() taxonListId: number | null = null;
   @Output() save = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
 

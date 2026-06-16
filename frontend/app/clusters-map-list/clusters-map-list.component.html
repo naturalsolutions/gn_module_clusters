@@ -59,6 +59,7 @@
           [parentFormControl]="acceptedTaxonControl"
           [charNumber]="3"
           [listLength]="20"
+          [idList]="config.CLUSTERS?.TAXON_LIST"
           (onChange)="onAcceptedTaxonSelect($event)"
           (onDelete)="onAcceptedTaxonDelete()"
         ></pnx-taxonomy>
@@ -240,6 +241,7 @@
         [waiting]="waiting"
         [isEditing]="isEditing"
         [users]="users"
+        [taxonListId]="config.CLUSTERS?.TAXON_LIST"
         (save)="saveCluster()"
         (cancel)="exitFormMode()"
       ></pnx-clusters-create-form>

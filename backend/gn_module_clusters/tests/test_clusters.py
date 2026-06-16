@@ -1,4 +1,5 @@
 from geoalchemy2.shape import to_shape
+from geonature.core.gn_commons.models import TModules
 from geonature.core.gn_synthese.models import Synthese
 from gn_module_clusters import MODULE_CODE
 from numpy.random import f
@@ -20,11 +21,6 @@ from gn_module_clusters.models import (
     InterventionStatus,
     ObservarationCluster,
 )
-
-
-@pytest.fixture()
-def per_dataset_uuid_check(monkeypatch):
-    monkeypatch.setitem(current_app.config[MODULE_CODE], "SOURCES", [1])
 
 
 # Helper to be sure to never have conflict with overlapping clusters
@@ -798,6 +794,9 @@ class TestClusters:
             )
         )
 
+
+@pytest.mark.usefixtures("client_class", "temporary_transaction")
+class TestClustersObservations:
     def test_list_observations(self, users, synthese_data):
         set_logged_user(self.client, users["admin_user"])
         r = self.client.post(url_for("clusters.list_observations"))
@@ -835,7 +834,13 @@ class TestClusters:
         assert users["stranger_user"].id_role in id_roles, r.json
 
     def test_cluster_observation_add(
-        self, users, clusters, synthese_data, sources_modules, monkeypatch
+        self,
+        users,
+        clusters,
+        synthese_data,
+        sources_modules,
+        monkeypatch,
+        datasets,
     ):
         def url(cluster, obs):
             return url_for(
@@ -859,9 +864,21 @@ class TestClusters:
         r = self.client.post(url("c1", "obs1"))
         assert r.status_code == Forbidden.code, r.data
         assert "allowed source" in r.json["description"], r.data
+
         monkeypatch.setitem(
             current_app.config["CLUSTERS"], "SOURCES", [s.id_source for s in synthese_data.values()]
         )
+
+        # We can not add an obs from a DS not associated to the cluster module
+        r = self.client.post(url("c1", "obs1"))
+        assert r.status_code == Forbidden.code, r.data
+        assert "dataset is not associated to this module" in r.json["description"], r.data
+
+        with db.session.begin_nested():
+            cluster_module = db.session.scalars(
+                sa.select(TModules).where(TModules.module_code == MODULE_CODE)
+            ).one()
+            datasets["own_dataset"].modules.append(cluster_module)
 
         # We can not add observations with a cd_nom not in cluster taxon tree
         assert not synthese_data["obs1"].taxref.tree <= clusters["c1"].taxref.tree
@@ -896,7 +913,7 @@ class TestClusters:
 
 
 @pytest.mark.usefixtures("client_class", "temporary_transaction")
-class TestInterventions:
+class TestClustersInterventions:
     def test_list_intervention_status(self, users):
         r = self.client.get(url_for("clusters.list_intervention_status"))
         assert r.status_code == Unauthorized.code, r.data

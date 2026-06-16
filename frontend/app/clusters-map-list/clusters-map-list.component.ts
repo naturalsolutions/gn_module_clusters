@@ -544,7 +544,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private applyDefaultFormValues(params) {
-    const sources = this.config.CLUSTERS.SOURCES;
+    const sources = this.config.CLUSTERS?.SOURCES;
     if (sources && sources.length > 0) {
       if (!this.formService.searchForm.contains('id_source')) {
         this.formService.searchForm.addControl(
@@ -587,6 +587,22 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       formParams['cd_ref_parent'] = [this.acceptedTaxon.cd_ref];
       formParams['cd_ref'] = [this.acceptedTaxon.cd_ref];
     }
+
+    if (this.config?.CLUSTERS?.VERIFY_OBS_JDD) {
+      this._dfService.getDatasets({ module_code: 'CLUSTERS' }).subscribe((datasets) => {
+        if (datasets && datasets.length > 0) {
+          formParams['id_dataset'] = datasets.map((d) => d.id_dataset);
+        } else {
+          formParams['id_dataset'] = [-1];
+        }
+        this._searchObservations(formParams);
+      });
+    } else {
+      this._searchObservations(formParams);
+    }
+  }
+
+  private _searchObservations(formParams) {
     this.obsLoaded = false;
     this.formService.searchForm.markAsPristine();
 

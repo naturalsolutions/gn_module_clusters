@@ -10,6 +10,8 @@ from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, Servi
 import requests
 
 from geonature.utils.env import db
+from geonature.core.gn_commons.models import TModules
+from geonature.core.gn_meta.models import TDatasets
 from geonature.core.gn_permissions.decorators import (
     check_cruved_scope,
     login_required,
@@ -387,6 +389,16 @@ def cluster_add_observation(id_cluster, id_observation, scope):
         raise Forbidden("You have no rights on this observation")
     if blueprint.config["SOURCES"] and obs.id_source not in blueprint.config["SOURCES"]:
         raise Forbidden("This observations does not come from an allowed source")
+    if (
+        blueprint.config["VERIFY_OBS_JDD"]
+        and obs.id_dataset is not None
+        and not db.session.scalar(
+            sa.select(TDatasets.modules.any(TModules.module_code == MODULE_CODE)).where(
+                TDatasets.id_dataset == obs.id_dataset
+            )
+        )
+    ):
+        raise Forbidden("Observation dataset is not associated to this module")
     if not obs.taxref.tree <= cluster.taxref.tree:
         raise BadRequest("Observation not in cluster taxon tree")
     if obs.cluster and not obs.cluster.has_instance_permission(scope):
