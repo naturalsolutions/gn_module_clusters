@@ -349,15 +349,17 @@ def list_roles(scope):
     # Please make sure this function is consistant with Cluster.filter_by_scope / Cluster.has_instance_permission
     if scope == 0:
         raise Forbidden
-    if scope == 1:
-        where_clause = User.id_role == current_user.id_role
-    elif scope == 2:
-        where_clause = sa.or_(
-            User.id_role == current_user.id_role, User.id_organisme == current_user.id_organisme
-        )
+    if scope in [1, 2]:
+        ors = [
+            User.id_role == current_user.id_role,
+            sa.and_(User.groupe.is_(True), User.members.any(User.id_role == current_user.id_role)),
+        ]
+        if scope == 2 and current_user.id_organisme is not None:
+            ors.append(User.id_organisme == current_user.id_organisme)
+        where_clause = sa.or_(*ors)
     elif scope == 3:
         where_clause = sa.true()
-    users = db.session.scalars(sa.select(User).where(User.groupe.is_(False), where_clause)).all()
+    users = db.session.scalars(sa.select(User).where(where_clause)).all()
     return UserSchema().dump(users, many=True)
 
 

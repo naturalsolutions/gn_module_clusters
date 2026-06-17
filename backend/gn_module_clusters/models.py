@@ -82,9 +82,13 @@ class Cluster(db.Model):
         if scope == 0:
             return False
         elif scope == 1:
-            return self.manager == user
+            return self.manager == user or (self.manager.groupe and self.manager in user.groups)
         elif scope == 2:
-            return self.manager == user or self.manager.id_organisme == user.id_organisme
+            return (
+                self.manager == user
+                or (self.manager.id_organisme and self.manager.id_organisme == user.id_organisme)
+                or (self.manager.groupe and self.manager in user.groups)
+            )
         elif scope == 3:
             return True
 
@@ -94,15 +98,16 @@ class Cluster(db.Model):
             user = g.current_user
         if scope == 0:
             return sa.false()
-        elif scope == 1:
-            return cls.manager_id == user.id_role
-        elif scope == 2:
-            return sa.or_(
+        elif scope in [1, 2]:
+            ors = [
                 cls.manager_id == user.id_role,
-                cls.manager_id.in_(
-                    sa.select(User.id_role).where(User.id_organisme == user.id_organisme)
+                cls.manager.has(
+                    sa.and_(User.groupe.is_(True), User.members.any(User.id_role == user.id_role))
                 ),
-            )
+            ]
+            if scope == 2 and user.id_organisme is not None:
+                ors.append(cls.manager.has(User.id_organisme == user.id_organisme))
+            return sa.or_(*ors)
         elif scope == 3:
             return sa.true()
 
