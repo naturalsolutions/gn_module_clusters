@@ -2,7 +2,7 @@ import { Component, OnInit, AfterViewInit, OnDestroy, ChangeDetectorRef, ViewChi
 import { NgbTypeaheadSelectItemEvent } from '@ng-bootstrap/ng-bootstrap';
 import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, forkJoin } from 'rxjs';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
 import * as cloneDeep from 'lodash/cloneDeep';
@@ -18,7 +18,8 @@ import { MapService } from '@geonature_common/map/map.service';
 import { SyntheseFormService } from '@geonature_common/form/synthese-form/synthese-form.service';
 import { ClustersObsMapComponent } from './clusters-obs-map/clusters-obs-map.component';
 
-import { SyntheseStoreService } from '../services/store.service';
+import { ClustersStoreService } from '../services/store.service';
+import { ClustersEditWrapperComponent } from '../clusters-edit-wrapper/clusters-edit-wrapper.component';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { ClustersAssociateModalComponent } from '../clusters-associate-modal/clusters-associate-modal.component';
 import { DataFormService } from '@geonature_common/form/data-form.service';
@@ -229,7 +230,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     public mapListService: MapListService,
     private modalService: NgbModal,
     private formService: SyntheseFormService,
-    private syntheseStore: SyntheseStoreService,
+    private clusterStore: ClustersStoreService,
     private toasterService: ToastrService,
     private route: ActivatedRoute,
     private ngModal: NgbModal,
@@ -303,6 +304,20 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       })
     );
 
+    this.subscriptions.push(
+      this.router.events
+        .pipe(filter((e) => e instanceof NavigationEnd))
+        .subscribe(() => {
+          const childRoute = this.route.firstChild;
+          if (childRoute?.routeConfig?.component === ClustersEditWrapperComponent) {
+            const id = Number(childRoute.snapshot.paramMap.get('id_cluster'));
+            this._initEditForm({ id } as Cluster);
+          } else if (this.editingCluster) {
+            this.exitFormMode();
+          }
+        })
+    );
+
     const pendingClusterId = this.route.snapshot.queryParamMap.get('associateClusterId');
     const pendingObsIds = this.route.snapshot.queryParamMap.get('associateObsIds');
     if (pendingClusterId && pendingObsIds) {
@@ -322,7 +337,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     );
 
     this.subscriptions.push(
-      this.syntheseStore.selectCluster$.subscribe((clusterId) => {
+      this.clusterStore.selectCluster$.subscribe((clusterId) => {
         const cluster = this.clusters.find((c) => c.id === clusterId);
         if (cluster) {
           this.selectCluster(cluster);
@@ -642,8 +657,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private initializeStores(rawGeojson) {
-    this.syntheseStore.clearData();
-    this.syntheseStore.setData(rawGeojson);
+    this.clusterStore.clearSyntheseData();
+    this.clusterStore.setSyntheseData(rawGeojson);
     this.mapListService.idName = 'id_synthese';
     this.mapListService.tableData = [];
     this.noGeomMessage = false;
@@ -652,8 +667,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   private extractIds(observation) {
     if (observation['id_synthese']) {
       const id = observation['id_synthese'];
-      if (this.syntheseStore.idSyntheseList.has(id) === false) {
-        this.syntheseStore.idSyntheseList.add(id);
+      if (this.clusterStore.idSyntheseList.has(id) === false) {
+        this.clusterStore.idSyntheseList.add(id);
       }
 
       if (this.idsByFeature.has(id) === false) {
@@ -696,7 +711,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   onSearchEvent() {
     this.formService.selectors = this.formService.selectors.set('limit', this.config.CLUSTERS.OBSERVATIONS_LIMIT);
-    this.syntheseStore.clearData();
+    this.clusterStore.clearSyntheseData();
     this.loadData();
   }
 
@@ -942,7 +957,13 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   openInfoModal(idSynthese) {
     const basePath = this.router.url.split('?')[0].split('/')[1] || 'clusters';
-    this.router.navigate([`${basePath}/occurrence`, idSynthese, 'details']);
+    if (this.editingCluster) {
+      this.router.navigateByUrl(`/${basePath}`).then(() => {
+        this.router.navigate([`/${basePath}/occurrence`, idSynthese, 'details']);
+      });
+    } else {
+      this.router.navigate([`/${basePath}/occurrence`, idSynthese, 'details']);
+    }
   }
 
   onToggleSearchBar() {
@@ -972,7 +993,15 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
   }
 
-  enterEditMode(cluster: Cluster) {
+  navigateToEdit(cluster: Cluster) {
+    this.router.navigate([
+      `/${this.moduleService.currentModule.module_path}/cluster`,
+      cluster.id,
+      'edit',
+    ]);
+  }
+
+  private _initEditForm(cluster: Cluster) {
     this.clusterCreationMode = false;
     this.editingCluster = cluster;
     this.isSearchBarReduced = true;
@@ -1019,6 +1048,14 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this._ms.map.off((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
     this._ms.leafletDrawFeatureGroup.clearLayers();
     this.formService.searchForm.controls.geoIntersection.reset();
+  }
+
+  cancelFormMode() {
+    const wasEditing = this.editingCluster !== null;
+    this.exitFormMode();
+    if (wasEditing) {
+      this.router.navigateByUrl(`/${this.moduleService.currentModule.module_path}`);
+    }
   }
 
   saveCluster() {

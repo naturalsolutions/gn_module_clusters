@@ -22,14 +22,16 @@ export class ClustersAssociateObsComponent implements OnInit {
 
     const baseUrl = `/${this.moduleService.currentModule.module_path}`;
 
+    const clusterUrl = `${baseUrl}/cluster/${idCluster}/details`;
+
     this.clustersDataService.addObservation(idCluster, idSynthese).subscribe({
       next: () => {
         this.toasterService.success('Observation associée au foyer');
-        this.router.navigateByUrl(baseUrl);
+        this.router.navigateByUrl(clusterUrl);
       },
       error: () => {
         this.toasterService.error("Erreur lors de l'association de l'observation");
-        this.router.navigateByUrl(baseUrl);
+        this.router.navigateByUrl(clusterUrl);
       },
     });
   }

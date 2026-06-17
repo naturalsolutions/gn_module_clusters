@@ -4,27 +4,27 @@ import { Subject } from 'rxjs';
 @Injectable({
   providedIn: 'root',
 })
-export class SyntheseStoreService {
+export class ClustersStoreService {
   public idSyntheseList: Set<number> = new Set();
-  private pointData: Object = {};
+  private syntheseData: Object = {};
   public selectCluster$ = new Subject<number>();
 
   constructor() {}
 
-  public hasData(): boolean {
-    return this.pointData && Object.keys(this.pointData).length > 0;
+  public hasSyntheseData(): boolean {
+    return this.syntheseData && Object.keys(this.syntheseData).length > 0;
   }
 
-  public getData(): Object {
-    return this.pointData;
+  public getSyntheseData(): Object {
+    return this.syntheseData;
   }
 
-  public setData(data: Object) {
-    this.pointData = data;
+  public setSyntheseData(data: Object) {
+    this.syntheseData = data;
   }
 
-  public clearData() {
+  public clearSyntheseData() {
     this.idSyntheseList = new Set();
-    this.pointData = {};
+    this.syntheseData = {};
   }
 }

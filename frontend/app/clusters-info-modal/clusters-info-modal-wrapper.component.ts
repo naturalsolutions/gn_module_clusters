@@ -5,7 +5,7 @@ import { takeUntil } from 'rxjs/operators';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
-import { SyntheseStoreService } from '../services/store.service';
+import { ClustersStoreService } from '../services/store.service';
 import { ClustersInfoModalComponent } from './clusters-info-modal.component';
 
 @Component({
@@ -21,7 +21,7 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
     private modalService: NgbModal,
     private router: Router,
     private moduleService: ModuleService,
-    private storeService: SyntheseStoreService,
+    private storeService: ClustersStoreService,
     private config: ConfigService,
     route: ActivatedRoute
   ) {
@@ -53,8 +53,16 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
       }
 
       this.currentDialog.result.then(
-        () => {
-          this.router.navigateByUrl(this.moduleUrl);
+        (result) => {
+          if (result === 'edit') {
+            this.router.navigate([
+              `/${this.moduleService.currentModule.module_path}/cluster`,
+              clusterId,
+              'edit',
+            ]);
+          } else {
+            this.router.navigateByUrl(this.moduleUrl);
+          }
         },
         (reason) => {
           if (reason === 'create-obs' && addObsModulePath) {

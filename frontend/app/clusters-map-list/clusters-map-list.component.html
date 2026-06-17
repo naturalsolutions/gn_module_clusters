@@ -218,7 +218,7 @@
             (clusterFilterChange)="clusterFilter = $event; updateWithClusterSwitch(); onSearchEvent()"
             (clusterClick)="onClusterClick($event)"
             (taxonClick)="onClusterTaxonClick($event)"
-            (editCluster)="enterEditMode($event)"
+            (editCluster)="navigateToEdit($event)"
             (infoCluster)="onClusterInfo($event)"
             (deleteCluster)="onDeleteCluster($event)"
           ></pnx-clusters-list>
@@ -243,7 +243,7 @@
         [users]="users"
         [taxonListId]="config.CLUSTERS?.TAXON_LIST"
         (save)="saveCluster()"
-        (cancel)="exitFormMode()"
+        (cancel)="cancelFormMode()"
       ></pnx-clusters-create-form>
     </div>
   </div>

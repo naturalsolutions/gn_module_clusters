@@ -40,6 +40,7 @@ import { ClustersAssociateModalComponent } from './clusters-associate-modal/clus
 import { ClustersAssociateObsComponent } from './clusters-associate-obs/clusters-associate-obs.component';
 import { ClustersInfoModalComponent } from './clusters-info-modal/clusters-info-modal.component';
 import { ClustersInfoModalWrapperComponent } from './clusters-info-modal/clusters-info-modal-wrapper.component';
+import { ClustersEditWrapperComponent } from './clusters-edit-wrapper/clusters-edit-wrapper.component';
 import { ClustersDataService } from './services/clusters-data.service';
 
 const routes: Routes = [
@@ -65,6 +66,10 @@ const routes: Routes = [
         path: 'cluster/:id_cluster',
         redirectTo: 'cluster/:id_cluster/details',
         pathMatch: 'full',
+      },
+      {
+        path: 'cluster/:id_cluster/edit',
+        component: ClustersEditWrapperComponent,
       },
       {
         path: 'cluster/:id_cluster/:tab',
@@ -133,6 +138,7 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
     ClustersAssociateObsComponent,
     ClustersInfoModalComponent,
     ClustersInfoModalWrapperComponent,
+    ClustersEditWrapperComponent,
     SyntheseObsModalWrapperComponent,
   ],
   entryComponents: [

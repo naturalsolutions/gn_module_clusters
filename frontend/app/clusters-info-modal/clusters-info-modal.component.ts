@@ -57,7 +57,7 @@ export class ClustersInfoModalComponent implements OnInit {
   }
 
   edit() {
-    this.activeModal.close(this.cluster);
+    this.activeModal.close('edit');
   }
 
   exportPdf() {
