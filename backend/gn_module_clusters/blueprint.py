@@ -401,6 +401,11 @@ def cluster_add_observation(id_cluster, id_observation, scope):
         )
     ):
         raise Forbidden("Observation dataset is not associated to this module")
+    if blueprint.config["VALID_STATUS"]:
+        if obs.nomenclature_valid_status.cd_nomenclature not in blueprint.config["VALID_STATUS"]:
+            raise BadRequest(
+                f"Le statut de validation de l'observation ({obs.nomenclature_valid_status.mnemonique}) n’est pas suffisant pour l’associer à un foyer."
+            )
     if not obs.taxref.tree <= cluster.taxref.tree:
         raise BadRequest("Observation not in cluster taxon tree")
     if obs.cluster and not obs.cluster.has_instance_permission(scope):

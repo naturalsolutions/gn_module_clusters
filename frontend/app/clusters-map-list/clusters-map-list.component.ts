@@ -57,6 +57,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public users: any[] = [];
   private pendingAssociate: { clusterId: number; obsIds: number[] } | null = null;
   private drawnGeometry: GeoJSON.Geometry | null = null;
+
   private pendingObsIdsForCreation: number[] | null = null;
   @ViewChild(ClustersObsMapComponent) obsMap: ClustersObsMapComponent;
   @ViewChild('confirmDeleteModal', { static: true }) confirmDeleteModal: TemplateRef<any>;
@@ -570,24 +571,26 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         this.formService.searchForm.patchValue({ id_source: sources });
       }
     }
-    this.formService
-      .processDefaultFilters(this.config.CLUSTERS.DEFAULT_FILTERS)
-      .subscribe((processedDefaultFilters) => {
-        if (params.get('id_import')) {
-          processedDefaultFilters['id_import'] = params.get('id_import');
-        }
-        this.formService.searchForm.patchValue(processedDefaultFilters);
-        this.formService.processedDefaultFilters = processedDefaultFilters;
-        this.changeDetector.detectChanges();
 
-        this.loadData();
-      });
+    const defaultFilters = { ...this.config.CLUSTERS.DEFAULT_FILTERS };
+    const validStatus = this.config?.CLUSTERS?.VALID_STATUS;
+    if (validStatus && validStatus.length > 0) {
+      defaultFilters['cd_nomenclature_valid_status'] = validStatus;
+    }
+
+    this.formService.processDefaultFilters(defaultFilters).subscribe((processedDefaultFilters) => {
+      this.formService.searchForm.patchValue(processedDefaultFilters);
+      this.formService.processedDefaultFilters = processedDefaultFilters;
+      this.changeDetector.detectChanges();
+
+      this.loadData();
+    });
   }
 
   loadData() {
     let formParams = this.formService.formatParams();
     this.lastSearchHadFilters = Object.keys(formParams).some(
-      key => key !== 'id_source'
+      key => key !== 'id_source' && key !== 'id_nomenclature_valid_status'
     );
     if (this.clusterFilter === null && !this.includeOrphanObs) {
       formParams['cluster_id'] = '*';

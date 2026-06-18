@@ -8,7 +8,7 @@ class ClustersConfigSchema(Schema):
     OBSERVATIONS_LIMIT = fields.Integer(load_default=100)
     # Module code of the module to redirect to when creating an observation
     CREATE_OBS_MODULE = fields.String(load_default=None)
-    # Default filters applied on module load
+    # Default observations filters applied on module initialisation
     DEFAULT_FILTERS = fields.Dict(load_default={})
     # Max zoom level for Leaflet marker clustering on the observation map.
     # Clustering is active below this zoom; disabled at/above it.
@@ -16,6 +16,10 @@ class ClustersConfigSchema(Schema):
     LEAFLET_CLUSTER_MAX_ZOOM = fields.Integer(load_default=12, allow_none=True)
     # If True, verify that the observation dataset (JDD) is linked to this module
     VERIFY_OBS_JDD = fields.Boolean(load_default=True)
+    # List of valid status codes to filter observations and to associate them to clusters.
+    # ("1" = Certain - très probable, "2" = Probable).
+    # Empty list means no filters.
+    VALID_STATUS = fields.List(fields.String, load_default=["1", "2"])
     # ID of a taxon list (bib_listes.id_liste) to restrict the taxon selector
     TAXON_LIST = fields.Integer(load_default=None, allow_none=True)
     # Max observations in PDF export

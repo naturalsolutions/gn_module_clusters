@@ -849,6 +849,13 @@ class TestClustersObservations:
                 id_observation=synthese_data[obs].id_synthese,
             )
 
+        valid_status_id = db.session.scalar(
+            sa.func.ref_nomenclatures.get_id_nomenclature("STATUT_VALID", "1")
+        )
+        with db.session.begin_nested():
+            for obs in ["obs1", "obs2", "obs4"]:
+                synthese_data[obs].id_nomenclature_valid_status = valid_status_id
+
         set_logged_user(self.client, users["user"])
 
         # We can not add an obs to a cluster on which we do not have the rights
@@ -890,6 +897,14 @@ class TestClustersObservations:
         r = self.client.post(url("c1", "obs4"))
         assert r.status_code == Forbidden.code, r.data
         assert "cluster on which you do not have rights" in r.json["description"], r.data
+
+        # We can not add an obs with a validation status not in the configured list
+        monkeypatch.setitem(current_app.config["CLUSTERS"], "VALID_STATUS", ["2"])
+        r = self.client.post(url("c1", "obs2"))
+        assert r.status_code == BadRequest.code, r.data
+        assert "statut de validation" in r.json["description"], r.data
+
+        monkeypatch.setitem(current_app.config["CLUSTERS"], "VALID_STATUS", ["1", "2"])
 
         r = self.client.post(url("c1", "obs2"))
         assert r.status_code == 204, r.data
