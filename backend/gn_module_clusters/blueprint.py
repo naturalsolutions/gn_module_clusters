@@ -355,7 +355,7 @@ def list_roles(scope):
         raise Forbidden
     if scope in [1, 2]:
         ors = []  # available managers
-        if blueprint.config["MANAGER_ENABLE_USER"]:
+        if not blueprint.config["MANAGER_GROUP_ONLY"]:
             ors.append(User.id_role == current_user.id_role)
         # Groups of the curren_user:
         groups_ands = [
@@ -371,7 +371,10 @@ def list_roles(scope):
             ors.append(User.id_organisme == current_user.id_organisme)
         where_clause = sa.or_(*ors)
     elif scope == 3:
-        where_clause = sa.true()
+        if blueprint.config["MANAGER_GROUP_ONLY"]:
+            where_clause = User.groupe.is_(True)
+        else:
+            where_clause = sa.true()
     users = db.session.scalars(sa.select(User).where(where_clause)).all()
     return UserSchema().dump(users, many=True)
 

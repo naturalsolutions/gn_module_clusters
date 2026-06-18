@@ -20,8 +20,8 @@ class ClustersConfigSchema(Schema):
     # ("1" = Certain - très probable, "2" = Probable).
     # Empty list means no filters.
     VALID_STATUS = fields.List(fields.String, load_default=["1", "2"])
-    # If False, the current user is excluded from available cluster managers (only groups are available)
-    MANAGER_ENABLE_USER = fields.Boolean(load_default=True)
+    # If True, only groups are proposed as available cluster managers
+    MANAGER_GROUP_ONLY = fields.Boolean(load_default=False)
     # List of group IDs to exclude from available cluster managers
     MANAGER_EXCLUDED_GROUPS_IDS = fields.List(fields.Int, load_default=[])
     # ID of a taxon list (bib_listes.id_liste) to restrict the taxon selector
