@@ -162,10 +162,30 @@ class TestClusters:
         assert faucons_cluster.name in names
         assert mammiferes_cluster.name not in names
 
-        # Multiple cd_noms including a descendant => faucons cluster still returned
+        # Multiple cd_noms with no common ancestor cluster => no result
+        r = self.client.get(
+            url,
+            query_string={"accepted_cd_nom": f"{faucons.cd_nom},{mammiferes.cd_nom}"},
+        )
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name not in names
+        assert mammiferes_cluster.name not in names
+
+        # Multiple cd_noms with a common ancestor cluster but its a parent => no result
         r = self.client.get(
             url,
             query_string={"accepted_cd_nom": f"{oiseaux.cd_nom},{faucon_pelerin.cd_nom}"},
+        )
+        assert r.status_code == 200, r.data
+        names = [c["name"] for c in r.json]
+        assert faucons_cluster.name not in names
+        assert mammiferes_cluster.name not in names
+
+        # Multiple cd_noms all accepted by faucons cluster
+        r = self.client.get(
+            url,
+            query_string={"accepted_cd_nom": f"{faucons.cd_nom},{faucon_pelerin.cd_nom}"},
         )
         assert r.status_code == 200, r.data
         names = [c["name"] for c in r.json]

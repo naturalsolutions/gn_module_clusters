@@ -887,9 +887,9 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
                 }
               }
               this.mapListService.tableData = [...this.mapListService.tableData];
-              this.toasterService.success(
-                `${result.obsIds.length} observation(s) associée(s) au foyer`
-              );
+              const suffix =
+                result.clusterId == null ? 'retirée(s) du foyer' : 'associée(s) au foyer';
+              this.toasterService.success(`${result.obsIds.length} observation(s) ${suffix}`);
             },
           });
         },

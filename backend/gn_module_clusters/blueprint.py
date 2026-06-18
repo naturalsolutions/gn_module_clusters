@@ -136,7 +136,7 @@ def list_clusters():
                 f"Some cd_nom have not been found: {','.join(map(str, not_found_cd_nom))}"
             )
         stmt = stmt.join(TaxrefTree, TaxrefTree.cd_nom == Cluster.cd_nom).where(
-            sa.or_(*[TaxrefTree.path.op("@>")(tree.path) for tree in accepted_trees])
+            sa.and_(*[TaxrefTree.path.op("@>")(tree.path) for tree in accepted_trees])
         )
 
     if as_geojson:
