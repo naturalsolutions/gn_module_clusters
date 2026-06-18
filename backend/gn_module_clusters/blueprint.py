@@ -350,10 +350,19 @@ def list_roles(scope):
     if scope == 0:
         raise Forbidden
     if scope in [1, 2]:
-        ors = [
-            User.id_role == current_user.id_role,
-            sa.and_(User.groupe.is_(True), User.members.any(User.id_role == current_user.id_role)),
+        ors = []  # available managers
+        if blueprint.config["MANAGER_ENABLE_USER"]:
+            ors.append(User.id_role == current_user.id_role)
+        # Groups of the curren_user:
+        groups_ands = [
+            User.groupe.is_(True),
+            User.members.any(User.id_role == current_user.id_role),
         ]
+        if blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]:
+            groups_ands.append(
+                sa.not_(User.id_role.in_(blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]))
+            )
+        ors.append(sa.and_(*groups_ands))
         if scope == 2 and current_user.id_organisme is not None:
             ors.append(User.id_organisme == current_user.id_organisme)
         where_clause = sa.or_(*ors)
