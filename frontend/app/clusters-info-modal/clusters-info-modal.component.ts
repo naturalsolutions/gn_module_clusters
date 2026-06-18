@@ -12,6 +12,7 @@ import { saveAs } from 'file-saver';
 })
 export class ClustersInfoModalComponent implements OnInit {
   @Input() clusterId: number;
+  @Input() canAddObs = false;
   @Input() onCreateObs: () => void = () => { };
   cluster: Cluster;
   loading = true;

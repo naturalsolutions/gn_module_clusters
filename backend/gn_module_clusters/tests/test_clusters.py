@@ -911,7 +911,10 @@ class TestClustersObservations:
         assert not synthese_data["obs1"].taxref.tree <= clusters["c1"].taxref.tree
         r = self.client.post(url("c1", "obs1"))
         assert r.status_code == BadRequest.code, r.data
-        assert "not in cluster taxon tree" in r.json["description"], r.data
+        assert (
+            "Le taxon de cette observation ne peut pas être ajouté à ce foyer."
+            in r.json["description"]
+        ), r.data
 
         # We can not add an obs which is already in a cluster on which we do not have the rights
         r = self.client.post(url("c1", "obs4"))

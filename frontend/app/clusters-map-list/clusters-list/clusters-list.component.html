@@ -55,9 +55,9 @@
       </a>
       <a
         class="link-dark ml-1"
-        (click)="exportPdf(row); $event.stopPropagation()"
-        matTooltip="Exporter en PDF"
-        [class.text-muted]="row._exporting"
+        (click)="row.cruved?.E && exportPdf(row); $event.stopPropagation()"
+        matTooltip="{{ row.cruved?.E ? 'Exporter en PDF' : 'Export non autorisé' }}"
+        [class.text-muted]="!row.cruved?.E || row._exporting"
       >
         <i
           class="fa fa-file-pdf-o"

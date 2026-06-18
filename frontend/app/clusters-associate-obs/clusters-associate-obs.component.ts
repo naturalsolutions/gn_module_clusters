@@ -30,7 +30,6 @@ export class ClustersAssociateObsComponent implements OnInit {
         this.router.navigateByUrl(clusterUrl);
       },
       error: () => {
-        this.toasterService.error("Erreur lors de l'association de l'observation");
         this.router.navigateByUrl(clusterUrl);
       },
     });

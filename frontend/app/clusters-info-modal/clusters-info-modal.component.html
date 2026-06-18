@@ -41,6 +41,7 @@
           <div class="mt-2">
             <div class="d-flex justify-content-end align-items-center mb-2">
               <button
+                *ngIf="cluster?.cruved?.U"
                 type="button"
                 class="btn btn-sm btn-outline-success"
                 (click)="showAddForm()">
@@ -56,7 +57,7 @@
               [reorderable]="true"
               [sorts]="[{ prop: 'id', dir: 'desc' }]"
             >
-              <ngx-datatable-column [maxWidth]="60" [sortable]="false">
+              <ngx-datatable-column *ngIf="cluster?.cruved?.U" [maxWidth]="60" [sortable]="false">
                 <ng-template let-row="row" ngx-datatable-cell-template>
                   <a class="link-dark" (click)="editIntervention(row); $event.stopPropagation()" matTooltip="Modifier">
                     <i class="fa fa-pencil"></i>
@@ -141,8 +142,8 @@
   </ng-template>
 </div>
 <div class="modal-footer">
-  <button type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
-  <button type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
-  <button type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
+  <button *ngIf="canAddObs" type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
+  <button *ngIf="cluster?.cruved?.E" type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
+  <button *ngIf="cluster?.cruved?.U" type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
   <button type="button" class="btn btn-secondary" (click)="activeModal.dismiss()">Fermer</button>
 </div>

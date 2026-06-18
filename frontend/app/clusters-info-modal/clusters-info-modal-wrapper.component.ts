@@ -44,9 +44,9 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
         size: 'xl',
       });
       this.currentDialog.componentInstance.clusterId = clusterId;
+      this.currentDialog.componentInstance.canAddObs = !!addObsModulePath;
 
       if (addObsModulePath) {
-        const redirectUrl = `${this.moduleUrl}/${clusterId}/associate-obs/{id_synthese}`;
         this.currentDialog.componentInstance.onCreateObs = () => {
           this.currentDialog.dismiss('create-obs');
         };

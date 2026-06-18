@@ -416,7 +416,7 @@ def cluster_add_observation(id_cluster, id_observation, scope):
                 f"Le statut de validation de l'observation ({obs.nomenclature_valid_status.mnemonique}) n’est pas suffisant pour l’associer à un foyer."
             )
     if not obs.taxref.tree <= cluster.taxref.tree:
-        raise BadRequest("Observation not in cluster taxon tree")
+        raise BadRequest("Le taxon de cette observation ne peut pas être ajouté à ce foyer.")
     if obs.cluster and not obs.cluster.has_instance_permission(scope):
         raise Forbidden(
             "Observation already associated to a cluster on which you do not have rights"
