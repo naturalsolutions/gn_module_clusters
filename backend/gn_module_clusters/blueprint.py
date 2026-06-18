@@ -205,7 +205,11 @@ def create_cluster(scope):
 )
 def get_cluster(id_cluster, scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    stmt = sa.select(Cluster).where(Cluster.id == id_cluster).options(undefer(Cluster.surface))
+    stmt = (
+        sa.select(Cluster)
+        .where(Cluster.id == id_cluster)
+        .options(undefer(Cluster.surface), undefer(Cluster.bbox))
+    )
     if as_geojson:
         stmt = stmt.options(undefer(Cluster.geom_4326))
     cluster = db.session.execute(stmt).scalar_one_or_none()
@@ -216,7 +220,7 @@ def get_cluster(id_cluster, scope):
     return dump(
         cluster,
         as_geojson=as_geojson,
-        only=["+surface", "+notes", "+interventions", "+interventions.status"],
+        only=["+surface", "+bbox", "+notes", "+interventions", "+interventions.status"],
     )
 
 

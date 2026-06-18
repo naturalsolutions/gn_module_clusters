@@ -45,6 +45,18 @@ class Cluster(db.Model):
     created_on = db.Column(sa.DateTime, server_default=sa.func.now())
 
     surface = db.column_property(sa.func.ST_Area(geom), deferred=True)
+    bbox = db.column_property(
+        sa.func.concat(
+            sa.func.ST_XMin(geom_4326),
+            ",",
+            sa.func.ST_YMin(geom_4326),
+            ",",
+            sa.func.ST_XMax(geom_4326),
+            ",",
+            sa.func.ST_YMax(geom_4326),
+        ),
+        deferred=True,
+    )
 
     @hybrid_property
     def observations_count(self):

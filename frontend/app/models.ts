@@ -22,6 +22,7 @@ export interface Cluster {
   observations_count?: number;
   interventions_count?: number;
   surface?: number;
+  bbox?: string;
   cruved?: Cruved;
   interventions?: Intervention[];
 }

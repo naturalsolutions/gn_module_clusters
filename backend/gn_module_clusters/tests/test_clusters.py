@@ -269,6 +269,7 @@ class TestClusters:
         r = self.client.get(url_for("clusters.get_cluster", id_cluster=clusters["c1"].id))
         assert r.status_code == 200, r.data
         assert "surface" in r.json, r.data
+        assert "bbox" in r.json, r.data
         assert "notes" in r.json, r.data
         assert "cruved" in r.json, r.data
         assert "interventions" in r.json, r.data

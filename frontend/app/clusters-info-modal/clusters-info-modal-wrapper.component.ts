@@ -66,10 +66,18 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
         },
         (reason) => {
           if (reason === 'create-obs' && addObsModulePath) {
+            const modal = this.currentDialog.componentInstance as ClustersInfoModalComponent;
             const redirectUrl = `${this.moduleUrl}/${clusterId}/associate-obs/{id_synthese}`;
-            this.router.navigate([`/${addObsModulePath}`], {
-              queryParams: { redirect: redirectUrl },
-            });
+            const queryParams: any = { redirect: redirectUrl };
+
+            if (modal.cluster?.cd_nom) {
+              queryParams.cd_nom = modal.cluster.cd_nom;
+            }
+            if (modal.cluster?.bbox) {
+              queryParams.bbox = modal.cluster.bbox;
+            }
+
+            this.router.navigate([`/${addObsModulePath}`], { queryParams });
           } else {
             this.router.navigateByUrl(this.moduleUrl);
           }

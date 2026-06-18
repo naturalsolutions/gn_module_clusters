@@ -40,6 +40,7 @@ class ClusterSchema(CruvedSchemaMixin, SmartRelationshipsMixin, GeoAlchemyAutoSc
     observations_count = fields.Integer(dump_only=True)
     interventions_count = fields.Integer(dump_only=True)
     surface = fields.Float(dump_only=True)
+    bbox = fields.String(dump_only=True)
     notes = auto_field(metadata={"exclude": True})
     interventions = Nested("InterventionSchema", many=True, dump_only=True)
 
