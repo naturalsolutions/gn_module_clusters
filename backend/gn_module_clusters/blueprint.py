@@ -2,8 +2,9 @@ from datetime import datetime
 
 from flask import Blueprint, request, g, jsonify, current_app, render_template
 from flask_login import current_user
+from ref_geo.utils import get_local_srid
 import sqlalchemy as sa
-from sqlalchemy.orm import undefer, selectinload, joinedload
+from sqlalchemy.orm import undefer, selectinload
 from utils_flask_sqla_geo.utils import geojsonify
 from marshmallow import ValidationError
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServiceUnavailable
@@ -263,68 +264,64 @@ def update_cluster(id_cluster, scope):
         update_schema.load(request.json, instance=cluster)
 
         attrs = sa.inspect(cluster).attrs
-        for attr in attrs:
-            if not attr.history.has_changes():
-                continue
-            if attr.key == "geom_4326":
-                if cluster.geom_4326.srid < 0:
-                    cluster.geom_4326.srid = 4326
-                check_cluster_overlap(cluster)
-                # FIXME: check obs are still in cluster geom?
-            elif attr.key == "name":
-                check_cluster_name(cluster)
-            elif attr.key == "manager_id":
-                db.session.expire(cluster, ["manager"])
-                if not cluster.manager:
-                    raise BadRequest(f"manager with id {cluster.manager_id} not found")
-                if not cluster.has_instance_permission(scope):
-                    raise Forbidden(f"You are not allowed to set this manager (scope: {scope}).")
-            elif attr.key == "status_id" and cluster.status_id is not None:
-                db.session.expire(cluster, ["status"])
-                if (
-                    not cluster.status
-                    or cluster.status.nomenclature_type.mnemonique != "CLUSTER_STATUS"
-                ):
-                    raise BadRequest(
-                        f"yearly state nomenclature with id {cluster.status_id} not found"
-                    )
-            elif attr.key == "yearly_state_id" and cluster.yearly_state_id is not None:
-                db.session.expire(cluster, ["yearly_state"])
-                if (
-                    not cluster.yearly_state
-                    or cluster.yearly_state.nomenclature_type.mnemonique != "CLUSTER_YEARLY_STATE"
-                ):
-                    raise BadRequest(
-                        f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
-                    )
-            elif attr.key == "cd_nom":
-                db.session.expire(cluster, ["taxref"])
-                if not cluster.taxref:
-                    raise BadRequest(f"taxon with cd_nom {cluster.cd_nom} not found")
-
-                tree_path = cluster.taxref.tree.path
-                # Obs in the cluster, but not in the cluster tree path!
-                bad_obs_stmt = (
-                    sa.select(Synthese.id_synthese)
-                    .join(
-                        ObservarationCluster,
-                        Synthese.id_synthese == ObservarationCluster.id_synthese,
-                    )
-                    .join(
-                        TaxrefTree,
-                        TaxrefTree.cd_nom == Synthese.cd_nom,
-                    )
-                    .where(
-                        ObservarationCluster.id_cluster == cluster.id,
-                        sa.not_(TaxrefTree.path.op("<@")(tree_path)),
-                    )
+        if attrs.geom_4326.history.has_changes():
+            if cluster.geom_4326.srid < 0:
+                cluster.geom_4326.srid = 4326
+            cluster.geom = sa.func.ST_Transform(cluster.geom_4326, get_local_srid(db.session))
+            check_cluster_overlap(cluster)
+            # FIXME: check obs are still in cluster geom?
+        if attrs.name.history.has_changes():
+            check_cluster_name(cluster)
+        if attrs.manager_id.history.has_changes():
+            db.session.expire(cluster, ["manager"])
+            if not cluster.manager:
+                raise BadRequest(f"manager with id {cluster.manager_id} not found")
+            if not cluster.has_instance_permission(scope):
+                raise Forbidden(f"You are not allowed to set this manager (scope: {scope}).")
+        if attrs.status_id.history.has_changes() and cluster.status_id is not None:
+            db.session.expire(cluster, ["status"])
+            if (
+                not cluster.status
+                or cluster.status.nomenclature_type.mnemonique != "CLUSTER_STATUS"
+            ):
+                raise BadRequest(f"yearly state nomenclature with id {cluster.status_id} not found")
+        if attrs.yearly_state_id.history.has_changes() and cluster.yearly_state_id is not None:
+            db.session.expire(cluster, ["yearly_state"])
+            if (
+                not cluster.yearly_state
+                or cluster.yearly_state.nomenclature_type.mnemonique != "CLUSTER_YEARLY_STATE"
+            ):
+                raise BadRequest(
+                    f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
                 )
-                if db.session.scalar(sa.select(bad_obs_stmt.exists())):
-                    raise BadRequest(
-                        f"Some observations in this cluster have a cd_nom that is not in the new taxon tree ({cluster.cd_nom})."
-                    )
+        if attrs.cd_nom.history.has_changes():
+            db.session.expire(cluster, ["taxref"])
+            if not cluster.taxref:
+                raise BadRequest(f"taxon with cd_nom {cluster.cd_nom} not found")
 
-                check_cluster_overlap(cluster)
+            tree_path = cluster.taxref.tree.path
+            # Obs in the cluster, but not in the cluster tree path!
+            bad_obs_stmt = (
+                sa.select(Synthese.id_synthese)
+                .join(
+                    ObservarationCluster,
+                    Synthese.id_synthese == ObservarationCluster.id_synthese,
+                )
+                .join(
+                    TaxrefTree,
+                    TaxrefTree.cd_nom == Synthese.cd_nom,
+                )
+                .where(
+                    ObservarationCluster.id_cluster == cluster.id,
+                    sa.not_(TaxrefTree.path.op("<@")(tree_path)),
+                )
+            )
+            if db.session.scalar(sa.select(bad_obs_stmt.exists())):
+                raise BadRequest(
+                    f"Some observations in this cluster have a cd_nom that is not in the new taxon tree ({cluster.cd_nom})."
+                )
+
+            check_cluster_overlap(cluster)
 
     db.session.commit()
     return dump(cluster)

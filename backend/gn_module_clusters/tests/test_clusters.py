@@ -2,7 +2,6 @@ from geoalchemy2.shape import to_shape
 from geonature.core.gn_commons.models import TModules
 from geonature.core.gn_synthese.models import Synthese
 from gn_module_clusters import MODULE_CODE
-from numpy.random import f
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 import sqlalchemy as sa
 import pytest
@@ -13,7 +12,7 @@ from werkzeug.exceptions import BadRequest, Forbidden, Unauthorized, Conflict
 from geonature.utils.env import db
 from geonature.tests.utils import set_logged_user
 from ref_geo.models import LAreas, BibAreasTypes
-from apptax.taxonomie.models import Taxref, TaxrefTree
+from apptax.taxonomie.models import Taxref
 
 from gn_module_clusters.models import (
     Cluster,
@@ -603,8 +602,15 @@ class TestClusters:
 
         # Verify fixtures are appropriate for this test purpose
         assert clusters["c1"].cd_nom == clusters["c2"].cd_nom
+
         assert clusters["c1"].cd_nom != clusters["c5"].cd_nom
-        assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
+        assert clusters["c1"].geom_4326 != clusters["c5"].geom_4326
+
+        assert clusters["c1"].cd_nom != clusters["c3"].cd_nom
+        assert clusters["c1"].geom_4326 != clusters["c3"].geom_4326
+
+        c1_geom = clusters["c1"].geom
+        c1_geom_4326 = clusters["c1"].geom_4326
 
         # Update without geom or cd_nom change → success
         r = self.client.post(
@@ -619,6 +625,7 @@ class TestClusters:
             json={"geom_4326": to_shape(clusters["c2"].geom_4326).wkt},
         )
         assert r.status_code == Conflict.code, r.data
+        assert clusters["c1"].geom_4326 == c1_geom_4326  # not changed
 
         # update with same geom as c5 (different cd_nom) → success
         r = self.client.post(
@@ -627,8 +634,9 @@ class TestClusters:
         )
         assert r.status_code == 200, r.data
         assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
+        assert clusters["c1"].geom != c1_geom  # updated from geom_4326
 
-        # update with same cd_nom as c5 (same geom) → Conflict
+        # update with same cd_nom as c5 (now same geom) → Conflict
         r = self.client.post(
             url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
             json={"cd_nom": clusters["c5"].cd_nom},
@@ -827,8 +835,6 @@ class TestClustersObservations:
         assert r.status_code == 200, r.data
 
     def test_list_roles(self, users):
-        from pprint import pprint
-
         url = url_for(endpoint="clusters.list_roles")
         r = self.client.post(url)
         assert r.status_code == Unauthorized.code, r.data

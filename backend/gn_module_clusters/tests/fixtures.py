@@ -41,6 +41,12 @@ def clusters(users, synthese_data, remove_existing_clusters) -> dict[str, Cluste
             LAreas.area_code == "30",
         )
     ).scalar_one()
+    p5 = db.session.execute(
+        sa.select(LAreas).where(
+            LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
+            LAreas.area_code == "62",
+        )
+    ).scalar_one()
     kwargs = {
         "cd_nom": synthese_data["obs2"].taxref.cd_sup,
     }
@@ -64,7 +70,7 @@ def clusters(users, synthese_data, remove_existing_clusters) -> dict[str, Cluste
         cls["c5"] = Cluster(
             name="Cluster 5",
             manager=users["stranger_user"],
-            geom=p1.geom,
+            geom=p5.geom,
             cd_nom=synthese_data["obs1"].cd_nom,
         )
         db.session.add(cls["c5"])

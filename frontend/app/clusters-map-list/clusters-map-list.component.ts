@@ -440,9 +440,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
               this.onClusterMapClick(feature.properties.id);
             },
           });
-          layer.bindTooltip(`<b>${feature.properties.name}</b>`, {
-            sticky: true,
-          });
           layer.bindPopup(
             `<b>${feature.properties.name}</b><br/>Espèce : ${getTaxonName(feature.properties as Cluster)}`
           );
@@ -475,7 +472,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     });
   }
 
-  private highlightClusterLayer(clusterId: number) {
+  private highlightClusterLayer(clusterId: number, fit = true) {
     this.resetClusterStyles();
     this.clusterFeatureGroup.eachLayer((fgLayer: any) => {
       if (fgLayer.eachLayer) {
@@ -493,10 +490,12 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
             } else {
               layer.setStyle(this.clusterSelectedStyle);
             }
-            if (layer.getBounds) {
-              this._ms.map.fitBounds(layer.getBounds(), { maxZoom: 18 });
-            } else if (layer.getLatLng) {
-              this._ms.map.setView(layer.getLatLng(), 15);
+            if (fit) {
+              if (layer.getBounds) {
+                this._ms.map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+              } else if (layer.getLatLng) {
+                this._ms.map.setView(layer.getLatLng(), 15);
+              }
             }
           }
         });
@@ -504,12 +503,12 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     });
   }
 
-  private selectCluster(cluster: Cluster) {
+  private selectCluster(cluster: Cluster, fit = true) {
     this.selectedObsIds = new Set();
     this.selectedObsRowId = null;
     this.selectedClusterId = cluster.id;
     this.obsMap?.clearMapSelection();
-    this.highlightClusterLayer(cluster.id);
+    this.highlightClusterLayer(cluster.id, fit);
     this.activeTab = 'clusters';
   }
 
@@ -546,7 +545,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.selectedClusterId = clusterId;
     const cluster = this.clusters.find((c) => c.id === clusterId);
     if (cluster) {
-      this.onClusterClick(cluster);
+      this.selectCluster(cluster, false);
     }
   }
 
@@ -1020,16 +1019,16 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       layer.eachLayer((l: any) => this._ms.leafletDrawFeatureGroup.addLayer(l));
       this._ms.setGeojsonCoord(feature.geometry);
     }
-    const c = cluster;
+    const props = (feature?.properties || {}) as any;
     this.creationForm.patchValue({
       geometry: feature?.geometry || null,
       properties: {
-        name: c.name,
-        notes: c.notes || null,
-        cd_nom: c.taxref || { cd_nom: c.cd_nom },
-        status_id: c.status_id,
-        yearly_state_id: c.yearly_state_id,
-        manager_id: c.manager_id,
+        name: props.name,
+        notes: props.notes || null,
+        cd_nom: props.taxref || { cd_nom: props.cd_nom },
+        status_id: props.status_id,
+        yearly_state_id: props.yearly_state_id,
+        manager_id: props.manager_id,
       },
     });
   }
@@ -1067,6 +1066,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     if (value.properties.cd_nom && typeof value.properties.cd_nom === 'object') {
       value.properties.cd_nom = value.properties.cd_nom.cd_nom;
     }
+    const moduleUrl = `/${this.moduleService.currentModule.module_path}`;
     if (this.editingCluster) {
       this.clustersDataService.updateCluster(this.editingCluster.id, value).subscribe({
         next: () => {
@@ -1074,6 +1074,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
           this.toasterService.success('Foyer modifié');
           this.loadClusters();
           this.exitFormMode();
+          this.router.navigateByUrl(moduleUrl);
         },
         error: () => {
           this.waiting = false;
@@ -1090,10 +1091,12 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
             this.clusters = [...this.clusters, data as Cluster];
             this.updateClusterLayer();
             this.exitFormMode();
+            this.router.navigateByUrl(moduleUrl);
             this.onAssociateObservations(obsIds, data.id);
           } else {
             this.loadClusters();
             this.exitFormMode();
+            this.router.navigateByUrl(moduleUrl);
           }
         },
         error: () => {
