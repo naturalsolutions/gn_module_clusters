@@ -1,4 +1,5 @@
 from flask import g
+from gn_module_clusters.config_schema import ClustersConfigSchema
 import pytest
 import sqlalchemy as sa
 
@@ -20,7 +21,7 @@ def clusters(users, synthese_data, remove_existing_clusters) -> dict[str, Cluste
     p1 = db.session.execute(
         sa.select(LAreas).where(
             LAreas.area_type.has(BibAreasTypes.type_code == "DEP"),
-            LAreas.area_code == "26",
+            LAreas.area_code == "85",
         )
     ).scalar_one()
     p2 = db.session.execute(
@@ -80,3 +81,11 @@ def clusters(users, synthese_data, remove_existing_clusters) -> dict[str, Cluste
         synthese_data["obs2"].cluster = cls["c4"]
         synthese_data["obs4"].cluster = cls["c5"]
     return cls
+
+
+@pytest.fixture
+def test_config(app, monkeypatch):
+    for key, value in (
+        ClustersConfigSchema().load({"VERIFY_OBS_JDD": False, "VALID_STATUS": []}).items()
+    ):
+        monkeypatch.setitem(app.config["CLUSTERS"], key, value)

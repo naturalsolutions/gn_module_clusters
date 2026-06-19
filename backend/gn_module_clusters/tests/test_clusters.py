@@ -30,7 +30,7 @@ def get_unused_cd_nom():
 
 
 @pytest.mark.usefixtures("client_class", "temporary_transaction")
-class TestClusters:
+class TestClustersClusters:
     def test_list_clusters_permissions(self, users, clusters):
         url = url_for("clusters.list_clusters")
 
@@ -275,6 +275,17 @@ class TestClusters:
         assert "notes" in r.json, r.data
         assert "cruved" in r.json, r.data
         assert "interventions" in r.json, r.data
+
+    def test_get_cluster_observations(self, users, clusters, synthese_data):
+        set_logged_user(self.client, users["admin_user"])
+        r = self.client.get(
+            url_for("clusters.get_cluster", id_cluster=clusters["c4"].id),
+            query_string={"observations": 1},
+        )
+        assert r.status_code == 200, r.data
+        assert "observations" in r.json, r.data
+        assert len(r.json["observations"]) == 1, r.data
+        assert r.json["observations"][0]["id_synthese"] == synthese_data["obs2"].id_synthese, r.data
 
     def test_create_cluster_permissions(self, users, remove_existing_clusters):
         url = url_for("clusters.create_cluster")
@@ -828,12 +839,7 @@ class TestClusters:
 
 
 @pytest.mark.usefixtures("client_class", "temporary_transaction")
-class TestClustersObservations:
-    def test_list_observations(self, users, synthese_data):
-        set_logged_user(self.client, users["admin_user"])
-        r = self.client.post(url_for("clusters.list_observations"))
-        assert r.status_code == 200, r.data
-
+class TestClustersRoles:
     def test_list_roles(self, users):
         url = url_for(endpoint="clusters.list_roles")
         r = self.client.post(url)
@@ -863,18 +869,15 @@ class TestClustersObservations:
         assert users["self_user"].id_role in id_roles, r.json
         assert users["stranger_user"].id_role in id_roles, r.json
 
-    def test_get_cluster_observations(self, users, clusters, synthese_data):
-        set_logged_user(self.client, users["admin_user"])
-        r = self.client.get(
-            url_for("clusters.get_cluster", id_cluster=clusters["c4"].id),
-            query_string={"observations": 1},
-        )
-        assert r.status_code == 200, r.data
-        assert "observations" in r.json, r.data
-        assert len(r.json["observations"]) == 1, r.data
-        assert r.json["observations"][0]["id_synthese"] == synthese_data["obs2"].id_synthese, r.data
 
-    def test_cluster_observation_add(
+@pytest.mark.usefixtures("client_class", "temporary_transaction", "test_config")
+class TestClustersObservations:
+    def test_list_observations(self, users, synthese_data):
+        set_logged_user(self.client, users["admin_user"])
+        r = self.client.post(url_for("clusters.list_observations"))
+        assert r.status_code == 200, r.data
+
+    def test_cluster_observation_add_permissions(
         self,
         users,
         clusters,
@@ -883,6 +886,8 @@ class TestClustersObservations:
         monkeypatch,
         datasets,
     ):
+        """Verify CRUVED"""
+
         def url(cluster, obs):
             return url_for(
                 "clusters.cluster_add_observation",
@@ -890,43 +895,13 @@ class TestClustersObservations:
                 id_observation=synthese_data[obs].id_synthese,
             )
 
-        valid_status_id = db.session.scalar(
-            sa.func.ref_nomenclatures.get_id_nomenclature("STATUT_VALID", "1")
-        )
-        with db.session.begin_nested():
-            for obs in ["obs1", "obs2", "obs4"]:
-                synthese_data[obs].id_nomenclature_valid_status = valid_status_id
-
         set_logged_user(self.client, users["user"])
 
         # We can not add an obs to a cluster on which we do not have the rights
-        r = self.client.post(url("c3", "obs1"))
+        r = self.client.post(url("c3", "obs2"))
         assert r.status_code == Forbidden.code, r.data
         assert "no rights on this cluster" in r.json["description"], r.data
-
-        # We can not add observations from a source not in module config
-        assert synthese_data["obs1"].id_source != sources_modules[1].id_source
-        monkeypatch.setitem(
-            current_app.config["CLUSTERS"], "SOURCES", [sources_modules[1].id_source]
-        )
-        r = self.client.post(url("c1", "obs1"))
-        assert r.status_code == Forbidden.code, r.data
-        assert "allowed source" in r.json["description"], r.data
-
-        monkeypatch.setitem(
-            current_app.config["CLUSTERS"], "SOURCES", [s.id_source for s in synthese_data.values()]
-        )
-
-        # We can not add an obs from a DS not associated to the cluster module
-        r = self.client.post(url("c1", "obs1"))
-        assert r.status_code == Forbidden.code, r.data
-        assert "dataset is not associated to this module" in r.json["description"], r.data
-
-        with db.session.begin_nested():
-            cluster_module = db.session.scalars(
-                sa.select(TModules).where(TModules.module_code == MODULE_CODE)
-            ).one()
-            datasets["own_dataset"].modules.append(cluster_module)
+        assert synthese_data["obs2"].cluster != clusters["c3"]
 
         # We can not add observations with a cd_nom not in cluster taxon tree
         assert not synthese_data["obs1"].taxref.tree <= clusters["c1"].taxref.tree
@@ -936,36 +911,165 @@ class TestClustersObservations:
             "Le taxon de cette observation ne peut pas être ajouté à ce foyer."
             in r.json["description"]
         ), r.data
+        assert synthese_data["obs1"].cluster != clusters["c1"]
 
-        # We can not add an obs which is already in a cluster on which we do not have the rights
-        r = self.client.post(url("c1", "obs4"))
+        with db.session.begin_nested():
+            synthese_data["obs2"].cluster = clusters["c3"]
+
+        # We can not add an obs which is already in cluster c3 on which we do not have the rights
+        r = self.client.post(url("c1", "obs2"))
         assert r.status_code == Forbidden.code, r.data
         assert "cluster on which you do not have rights" in r.json["description"], r.data
+        assert synthese_data["obs2"].cluster == clusters["c3"]  # unchanged
+
+        with db.session.begin_nested():
+            synthese_data["obs2"].cluster = clusters["c2"]
+
+        # But we can change cluster of an obs if we have rights on the other cluster too
+        r = self.client.post(url("c1", "obs2"))
+        assert r.status_code == 204, r.data
+        db.session.refresh(synthese_data["obs4"])
+        assert synthese_data["obs2"].cluster == clusters["c1"]  # changed
+
+    def test_cluster_observation_add_sources(
+        self,
+        users,
+        clusters,
+        synthese_data,
+        sources_modules,
+        monkeypatch,
+        datasets,
+    ):
+        """Verify SOURCES parameter has effect"""
+
+        assert synthese_data["obs1"].id_source != sources_modules[1].id_source
+        monkeypatch.setitem(
+            current_app.config["CLUSTERS"], "SOURCES", [sources_modules[1].id_source]
+        )
+
+        url = url_for(
+            "clusters.cluster_add_observation",
+            id_cluster=clusters["c1"].id,
+            id_observation=synthese_data["obs2"].id_synthese,
+        )
+
+        set_logged_user(self.client, users["user"])
+
+        r = self.client.post(url)
+        assert r.status_code == Forbidden.code, r.data
+        assert "allowed source" in r.json["description"], r.data
+
+        monkeypatch.setitem(
+            current_app.config["CLUSTERS"], "SOURCES", [synthese_data["obs2"].id_source]
+        )
+
+        r = self.client.post(url)
+        assert r.status_code == 204, r.data
+
+        with db.session.begin_nested():
+            cluster_module = db.session.scalars(
+                sa.select(TModules).where(TModules.module_code == MODULE_CODE)
+            ).one()
+            datasets["own_dataset"].modules.append(cluster_module)
+
+        r = self.client.post(url)
+        assert r.status_code == 204, r.data
+        assert synthese_data["obs2"].cluster == clusters["c1"]
+
+    def test_cluster_observation_add_dataset(
+        self,
+        users,
+        clusters,
+        synthese_data,
+        sources_modules,
+        monkeypatch,
+        datasets,
+    ):
+        """Verify VERIFY_OBS_JDD parameter has effect"""
+
+        monkeypatch.setitem(current_app.config["CLUSTERS"], "VERIFY_OBS_JDD", True)
+
+        url = url_for(
+            "clusters.cluster_add_observation",
+            id_cluster=clusters["c1"].id,
+            id_observation=synthese_data["obs2"].id_synthese,
+        )
+
+        set_logged_user(self.client, users["user"])
+
+        # We can not add an obs from a DS not associated to the cluster module
+        r = self.client.post(url)
+        assert r.status_code == Forbidden.code, r.data
+        assert "dataset is not associated to this module" in r.json["description"], r.data
+
+        with db.session.begin_nested():
+            cluster_module = db.session.scalars(
+                sa.select(TModules).where(TModules.module_code == MODULE_CODE)
+            ).one()
+            datasets["own_dataset"].modules.append(cluster_module)
+
+        r = self.client.post(url)
+        assert r.status_code == 204, r.data
+
+    def test_cluster_observation_add_valid_status(
+        self,
+        users,
+        clusters,
+        synthese_data,
+        sources_modules,
+        monkeypatch,
+        datasets,
+    ):
+        """Verify STATUT_VALID has effect"""
+
+        url = url_for(
+            "clusters.cluster_add_observation",
+            id_cluster=clusters["c1"].id,
+            id_observation=synthese_data["obs2"].id_synthese,
+        )
+
+        set_logged_user(self.client, users["user"])
+
+        valid_status_id = db.session.scalar(
+            sa.func.ref_nomenclatures.get_id_nomenclature("STATUT_VALID", "1")
+        )
+        with db.session.begin_nested():
+            synthese_data["obs2"].id_nomenclature_valid_status = valid_status_id
 
         # We can not add an obs with a validation status not in the configured list
         monkeypatch.setitem(current_app.config["CLUSTERS"], "VALID_STATUS", ["2"])
-        r = self.client.post(url("c1", "obs2"))
+        r = self.client.post(url)
         assert r.status_code == BadRequest.code, r.data
         assert "statut de validation" in r.json["description"], r.data
 
         monkeypatch.setitem(current_app.config["CLUSTERS"], "VALID_STATUS", ["1", "2"])
 
-        r = self.client.post(url("c1", "obs2"))
+        r = self.client.post(url)
         assert r.status_code == 204, r.data
-
         db.session.refresh(synthese_data["obs2"])
         assert synthese_data["obs2"].cluster == clusters["c1"]
 
-    def test_cluster_observation_remove(self, users, clusters, synthese_data):
-        def url(cluster, obs):
-            return url_for(
-                "clusters.cluster_remove_observation",
-                id_cluster=clusters[cluster].id,
-                id_observation=synthese_data[obs].id_synthese,
-            )
+    def test_cluster_observation_remove_permissions(self, users, clusters, synthese_data):
+        url = url_for(
+            "clusters.cluster_remove_observation",
+            id_cluster=clusters["c1"].id,
+            id_observation=synthese_data["obs2"].id_synthese,
+        )
+
+        with db.session.begin_nested():
+            synthese_data["obs2"].cluster = clusters["c1"]
+
+        r = self.client.delete(url)
+        assert r.status_code == Unauthorized.code, r.data
+
+        set_logged_user(self.client, users["stranger_user"])
+
+        r = self.client.delete(url)
+        assert r.status_code == Forbidden.code, r.data
 
         set_logged_user(self.client, users["user"])
-        r = self.client.delete(url("c4", "obs2"))
+
+        r = self.client.delete(url)
         assert r.status_code == 204, r.data
         db.session.refresh(synthese_data["obs2"])
         assert synthese_data["obs2"].cluster == None
