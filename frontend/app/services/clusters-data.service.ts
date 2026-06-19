@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { Cluster, ClusterFeature, Intervention } from '../models';
 
 const GEOJSON_CONTENT_TYPE = new HttpHeaders({ 'Content-Type': 'application/geo+json' });
-const GEOJSON_ACCEPT = new HttpHeaders({ 'Accept': 'application/geo+json' });
+const GEOJSON_ACCEPT = new HttpHeaders({ 'Accept': 'application/json, application/geo+json' });
 
 @Injectable()
 export class ClustersDataService {
@@ -47,15 +47,15 @@ export class ClustersDataService {
     });
   }
 
-  createCluster(feature: ClusterFeature): Observable<Cluster> {
-    return this._http.post<Cluster>(`${this.CLUSTERS_API}/`, feature, {
-      headers: GEOJSON_CONTENT_TYPE,
+  createCluster(feature: ClusterFeature): Observable<GeoJSON.Feature> {
+    return this._http.post<GeoJSON.Feature>(`${this.CLUSTERS_API}/`, feature, {
+      headers: GEOJSON_ACCEPT.set('Content-Type', 'application/geo+json'),
     });
   }
 
-  updateCluster(id: number, feature: ClusterFeature): Observable<Cluster> {
-    return this._http.post<Cluster>(`${this.CLUSTERS_API}/${id}`, feature, {
-      headers: GEOJSON_CONTENT_TYPE,
+  updateCluster(id: number, feature: ClusterFeature): Observable<GeoJSON.Feature> {
+    return this._http.post<GeoJSON.Feature>(`${this.CLUSTERS_API}/${id}`, feature, {
+      headers: GEOJSON_ACCEPT.set('Content-Type', 'application/geo+json'),
     });
   }
 
@@ -63,10 +63,15 @@ export class ClustersDataService {
     return this._http.delete<void>(`${this.CLUSTERS_API}/${id}`);
   }
 
-  addObservation(idCluster: number, idObservation: number): Observable<void> {
-    return this._http.post<void>(
+  addObservation(idCluster: number, idObservation: number, options?: { extendsCluster?: boolean }): Observable<GeoJSON.Feature> {
+    let params = new HttpParams();
+    if (options?.extendsCluster) {
+      params = params.set('extends_cluster', '1');
+    }
+    return this._http.post<GeoJSON.Feature>(
       `${this.CLUSTERS_API}/${idCluster}/observations/${idObservation}`,
-      null
+      null,
+      { params, headers: { 'not-to-handle': 'true', 'Accept': 'application/json, application/geo+json' } },
     );
   }
 

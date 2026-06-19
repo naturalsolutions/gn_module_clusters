@@ -38,16 +38,13 @@ import { I18nService } from '@geonature/shared/translate/i18n-service';
 import { ObsListComponent } from './clusters-map-list/obs-list/obs-list.component';
 import { ClustersAssociateModalComponent } from './clusters-associate-modal/clusters-associate-modal.component';
 import { ClustersAssociateObsComponent } from './clusters-associate-obs/clusters-associate-obs.component';
+import { ClustersAssociateObsConflictModalComponent } from './clusters-associate-obs-conflict-modal/clusters-associate-obs-conflict-modal.component';
 import { ClustersInfoModalComponent } from './clusters-info-modal/clusters-info-modal.component';
 import { ClustersInfoModalWrapperComponent } from './clusters-info-modal/clusters-info-modal-wrapper.component';
 import { ClustersEditWrapperComponent } from './clusters-edit-wrapper/clusters-edit-wrapper.component';
 import { ClustersDataService } from './services/clusters-data.service';
 
 const routes: Routes = [
-  {
-    path: ':id_cluster/associate-obs/:id_synthese',
-    component: ClustersAssociateObsComponent,
-  },
   {
     path: '',
     component: ClustersMapListComponent,
@@ -64,7 +61,7 @@ const routes: Routes = [
       },
       {
         path: 'cluster/:id_cluster',
-        redirectTo: 'cluster/:id_cluster/details',
+        redirectTo: 'cluster/:id_cluster/info/details',
         pathMatch: 'full',
       },
       {
@@ -72,8 +69,12 @@ const routes: Routes = [
         component: ClustersEditWrapperComponent,
       },
       {
-        path: 'cluster/:id_cluster/:tab',
+        path: 'cluster/:id_cluster/info/:tab',
         component: ClustersInfoModalWrapperComponent,
+      },
+      {
+        path: ':id_cluster/associate-obs/:id_synthese',
+        component: ClustersAssociateObsComponent,
       },
     ],
   },
@@ -136,6 +137,7 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
     ObsListComponent,
     ClustersAssociateModalComponent,
     ClustersAssociateObsComponent,
+    ClustersAssociateObsConflictModalComponent,
     ClustersInfoModalComponent,
     ClustersInfoModalWrapperComponent,
     ClustersEditWrapperComponent,
@@ -145,6 +147,7 @@ export function createTranslateLoader(http: HttpClient, config: ConfigService) {
     ClustersMapListComponent,
     SyntheseInfoObsComponent,
     ClustersAssociateModalComponent,
+    ClustersAssociateObsConflictModalComponent,
     ClustersInfoModalComponent,
     ClustersInfoModalWrapperComponent,
     DiscussionCardComponent,

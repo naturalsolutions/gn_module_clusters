@@ -8,6 +8,7 @@ export class ClustersStoreService {
   public idSyntheseList: Set<number> = new Set();
   private syntheseData: Object = {};
   public selectCluster$ = new Subject<number>();
+  public clusterUpdated$ = new Subject<GeoJSON.Feature>();
 
   constructor() {}
 

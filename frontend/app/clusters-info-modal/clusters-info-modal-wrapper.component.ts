@@ -40,13 +40,21 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
 
     route.params.pipe(takeUntil(this.destroy)).subscribe((params) => {
       const clusterId = +params.id_cluster;
+
+      if (this.currentDialog) {
+        return;
+      }
+
       this.storeService.selectCluster$.next(clusterId);
 
       this.currentDialog = this.modalService.open(ClustersInfoModalComponent, {
         size: 'xl',
       });
       this.currentDialog.componentInstance.clusterId = clusterId;
+      this.currentDialog.componentInstance.tab = params.tab || 'details';
       this.currentDialog.componentInstance.canAddObs = !!addObsModulePath;
+      this.currentDialog.componentInstance.openObsId =
+        Number(route.snapshot.queryParamMap.get('openObs')) || undefined;
 
       if (addObsModulePath) {
         this.currentDialog.componentInstance.onCreateObs = () => {
@@ -82,7 +90,9 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
             this.router.navigateByUrl(this.moduleUrl);
           }
         }
-      );
+      ).finally(() => {
+        this.currentDialog = null;
+      });
     });
   }
 

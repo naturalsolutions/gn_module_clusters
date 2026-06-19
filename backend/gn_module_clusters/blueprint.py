@@ -1,13 +1,21 @@
 from datetime import datetime
 
 from flask import Blueprint, request, g, jsonify, current_app, render_template
+import json
 from flask_login import current_user
 from ref_geo.utils import get_local_srid
 import sqlalchemy as sa
 from sqlalchemy.orm import undefer, selectinload
 from utils_flask_sqla_geo.utils import geojsonify
 from marshmallow import ValidationError
-from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServiceUnavailable
+from werkzeug.exceptions import (
+    BadRequest,
+    Conflict,
+    Forbidden,
+    HTTPException,
+    NotFound,
+    ServiceUnavailable,
+)
 import requests
 
 from geonature.utils.env import db
@@ -39,6 +47,24 @@ from gn_module_clusters.models import (
 from gn_module_clusters.schemas import ClusterSchema, InterventionSchema, InterventionStatusSchema
 
 blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__, template_folder="templates")
+
+
+# can be removed after merge of https://github.com/PnX-SI/GeoNature/pull/4195
+@blueprint.errorhandler(HTTPException)
+def handle_http_exception(e):
+    response = e.get_response()
+    if request.accept_mimetypes.best == "application/json":
+        response.data = json.dumps(
+            {
+                "code": e.code,
+                "name": e.name,
+                "description": e.description,
+                "request_id": request.environ.get("FLASK_REQUEST_ID"),
+                **getattr(e, "extra", {}),
+            }
+        )
+        response.content_type = "application/json"
+    return response
 
 
 @blueprint.record_once
@@ -76,6 +102,27 @@ def check_cluster_overlap(cluster):
         )
 
 
+def check_cluster_contains_obs(cluster):
+    """Raise Conflict if the cluster has obs which are not contained within the cluster geometry."""
+    bad_obs_stmt = (
+        sa.select(Synthese.id_synthese)
+        .join(
+            ObservarationCluster,
+            Synthese.id_synthese == ObservarationCluster.id_synthese,
+        )
+        .where(
+            ObservarationCluster.id_cluster == cluster.id,
+            sa.not_(sa.func.ST_Within(Synthese.the_geom_4326, cluster.geom_4326)),
+        )
+    )
+    if db.session.scalar(sa.select(bad_obs_stmt.exists())):
+        e = Conflict(
+            "Certaine observations ne sont pas contenues dans l’enprise géographique de ce foyer."
+        )
+        e.extra = {"reason": "obs_outside_cluster_geom"}
+        raise e
+
+
 def check_cluster_name(cluster):
     """Raise Conflict if another cluster with the same name already exists."""
     where_clauses = [Cluster.name == cluster.name]
@@ -87,7 +134,7 @@ def check_cluster_name(cluster):
 
 def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
-        as_geojson = request.accept_mimetypes.best == "application/geo+json"
+        as_geojson = "application/geo+json" in request.accept_mimetypes
     only += [
         "manager",
         "taxref",
@@ -126,7 +173,7 @@ def list_clusters():
     if scope == 0:
         raise Forbidden
 
-    as_geojson = request.accept_mimetypes.best == "application/geo+json"
+    as_geojson = "application/geo+json" in request.accept_mimetypes
     stmt = sa.select(Cluster).where(Cluster.filter_by_scope(scope))
 
     accepted_cd_nom = request.args.get("accepted_cd_nom")
@@ -212,7 +259,7 @@ def create_cluster(scope):
     action="R", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
 )
 def get_cluster(id_cluster, scope):
-    as_geojson = request.accept_mimetypes.best == "application/geo+json"
+    as_geojson = "application/geo+json" in request.accept_mimetypes
     stmt = sa.select(Cluster).where(Cluster.id == id_cluster)
     only = []
 
@@ -269,7 +316,7 @@ def update_cluster(id_cluster, scope):
                 cluster.geom_4326.srid = 4326
             cluster.geom = sa.func.ST_Transform(cluster.geom_4326, get_local_srid(db.session))
             check_cluster_overlap(cluster)
-            # FIXME: check obs are still in cluster geom?
+            check_cluster_contains_obs(cluster)
         if attrs.name.history.has_changes():
             check_cluster_name(cluster)
         if attrs.manager_id.history.has_changes():
@@ -443,10 +490,50 @@ def cluster_add_observation(id_cluster, id_observation, scope):
         raise Forbidden(
             "Observation already associated to a cluster on which you do not have rights"
         )
-    # FIXME: checks geometry (obs geom in cluster geom)?
+    # Verify the obs is in cluster geom
+    if obs.the_geom_4326 is not None and db.session.scalar(
+        sa.select(
+            sa.exists().where(
+                Synthese.id_synthese == obs.id_synthese,
+                Cluster.id == cluster.id,
+                sa.not_(sa.func.ST_Within(Synthese.the_geom_4326, Cluster.geom_4326)),
+            )
+        )
+    ):
+        if request.args.get("extends_cluster", type=int) != 1:
+            e = Conflict("L'observation n'est pas située dans l'emprise géographique du foyer.")
+            e.extra = {"reason": "obs_outside_cluster_geom"}
+            raise e
+        # We are going to extends the cluster geom to include the obs geom
+        # We work with local geometry, we apply a buffer of OBS_BUFFER_SIZE (in meters) on obs geom
+        # Then we compute compute the cluster new geom as the convex hull of previous cluster geom and the buffered obs geom
+        # Finally we convert back the local geom to 4326
+        obs_buffer_size = blueprint.config["OBS_BUFFER_SIZE"]
+        new_geom_cte = (
+            sa.select(
+                sa.func.ST_ConvexHull(
+                    sa.func.ST_Collect(
+                        Cluster.geom,
+                        sa.func.ST_Buffer(Synthese.the_geom_local, obs_buffer_size, 2),
+                    )
+                ).label("geom")
+            )
+            .where(Cluster.id == id_cluster, Synthese.id_synthese == id_observation)
+            .cte("new_geom_cte")
+        )
+        new_geom = sa.select(new_geom_cte.c.geom).scalar_subquery()
+        db.session.execute(
+            sa.update(Cluster)
+            .where(Cluster.id == id_cluster)
+            .values(
+                geom=new_geom,
+                geom_4326=sa.func.ST_Transform(new_geom, 4326),
+            )
+        )
+        db.session.expire(cluster, ["geom", "geom_4326"])
     obs.cluster = cluster
     db.session.commit()
-    return "", 204
+    return dump(cluster)
 
 
 @blueprint.route(rule="/<int:id_cluster>/observations/<int:id_observation>", methods=["DELETE"])

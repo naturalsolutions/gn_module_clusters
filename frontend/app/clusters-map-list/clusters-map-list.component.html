@@ -45,6 +45,7 @@
         [inputSyntheseData]="mapListService.geojsonData"
         [isClusterFormMode]="isClusterFormMode"
         [drawEnabled]="!isSearchBarReduced || isClusterFormMode"
+        [skipFitBounds]="selectedClusterId != null"
       ></pnx-clusters-obs-map>
     </div>
     <div class="col-sm-12 col-md-5 padding-sm right-panel">
@@ -233,18 +234,18 @@
               <mat-icon>add_circle_outline</mat-icon>
             </button>
           </div>
+          <pnx-clusters-create-form
+            *ngIf="clusterCreationMode || editingCluster"
+            [creationForm]="creationForm"
+            [waiting]="waiting"
+            [isEditing]="isEditing"
+            [users]="users"
+            [taxonListId]="config.CLUSTERS?.TAXON_LIST"
+            (save)="saveCluster()"
+            (cancel)="cancelFormMode()"
+          ></pnx-clusters-create-form>
         </div>
       </div>
-      <pnx-clusters-create-form
-        *ngIf="clusterCreationMode || editingCluster"
-        [creationForm]="creationForm"
-        [waiting]="waiting"
-        [isEditing]="isEditing"
-        [users]="users"
-        [taxonListId]="config.CLUSTERS?.TAXON_LIST"
-        (save)="saveCluster()"
-        (cancel)="cancelFormMode()"
-      ></pnx-clusters-create-form>
     </div>
   </div>
 </div>

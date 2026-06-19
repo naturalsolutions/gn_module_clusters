@@ -1,0 +1,7 @@
+{
+  "name": "gn-module-clusters",
+  "version": "1.0.0",
+  "dependencies": {
+    "@turf/buffer": "^6.5.0"
+  }
+}

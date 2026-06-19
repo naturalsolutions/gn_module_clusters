@@ -654,6 +654,19 @@ class TestClustersClusters:
         )
         assert r.status_code == Conflict.code, r.data
 
+    def test_update_cluster_geom_with_obs(self, users, clusters, synthese_data):
+        set_logged_user(self.client, users["user"])
+
+        c4_geom_4326 = clusters["c4"].geom_4326
+        r = self.client.post(
+            url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c4"].id),
+            json={"geom_4326": to_shape(synthese_data["obs1"].the_geom_4326).wkt},
+        )
+        assert r.status_code == Conflict.code, r.data
+        assert "ne sont pas contenues dans l’enprise géographique" in r.json["description"], r.data
+        assert r.json["reason"] == "obs_outside_cluster_geom", r.data
+        assert clusters["c4"].geom_4326 == c4_geom_4326  # not modified
+
     def test_update_cluster_nomenclatures(self, users, clusters):
         def url(cluster):
             return url_for("clusters.update_cluster", id_cluster=clusters[cluster].id)
@@ -1047,6 +1060,40 @@ class TestClustersObservations:
         r = self.client.post(url)
         assert r.status_code == 204, r.data
         db.session.refresh(synthese_data["obs2"])
+        assert synthese_data["obs2"].cluster == clusters["c1"]
+
+    def test_cluster_observation_add_geom(
+        self,
+        users,
+        clusters,
+        synthese_data,
+        sources_modules,
+        monkeypatch,
+        datasets,
+    ):
+        """Verify the obs geom is in cluster geom"""
+
+        url = url_for(
+            "clusters.cluster_add_observation",
+            id_cluster=clusters["c1"].id,
+            id_observation=synthese_data["obs2"].id_synthese,
+        )
+
+        set_logged_user(self.client, users["user"])
+
+        with db.session.begin_nested():
+            synthese_data["obs2"].the_geom_4326 = clusters["c3"].geom_4326
+
+        r = self.client.post(url)
+        assert r.status_code == Conflict.code, r.data
+        assert "n'est pas située dans l'emprise géographique" in r.json["description"], r.data
+        assert r.json["reason"] == "obs_outside_cluster_geom", r.data
+        assert synthese_data["obs2"].cluster != clusters["c1"]
+
+        with db.session.begin_nested():
+            synthese_data["obs2"].the_geom_4326 = clusters["c1"].geom_4326
+        r = self.client.post(url)
+        assert r.status_code == 200, r.data
         assert synthese_data["obs2"].cluster == clusters["c1"]
 
     def test_cluster_observation_remove_permissions(self, users, clusters, synthese_data):

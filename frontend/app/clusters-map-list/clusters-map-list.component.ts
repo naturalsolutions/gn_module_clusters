@@ -7,6 +7,7 @@ import { filter } from 'rxjs/operators';
 
 import * as cloneDeep from 'lodash/cloneDeep';
 import * as L from 'leaflet';
+import buffer from '@turf/buffer';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
 
@@ -22,6 +23,7 @@ import { ClustersStoreService } from '../services/store.service';
 import { ClustersEditWrapperComponent } from '../clusters-edit-wrapper/clusters-edit-wrapper.component';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { ClustersAssociateModalComponent } from '../clusters-associate-modal/clusters-associate-modal.component';
+import { ClustersAssociateObsConflictModalComponent } from '../clusters-associate-obs-conflict-modal/clusters-associate-obs-conflict-modal.component';
 import { DataFormService } from '@geonature_common/form/data-form.service';
 import { Cluster, getTaxonName, getManagerName } from '../models';
 import { Taxon } from '@geonature_common/form/taxonomy/taxonomy.component';
@@ -347,6 +349,26 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         }
       })
     );
+
+    this.subscriptions.push(
+      this.clusterStore.clusterUpdated$.subscribe((feature) => {
+        const cluster = feature.properties as Cluster;
+        if (!cluster?.id) return;
+        const i = this.clusters.findIndex((c) => c.id === cluster.id);
+        if (i !== -1) {
+          this.clusters[i] = cluster;
+        }
+        if (this.clusterFC) {
+          const j = this.clusterFC.features.findIndex(
+            (f) => (f.properties as any)?.id === cluster.id
+          );
+          if (j !== -1) {
+            this.clusterFC.features[j] = feature as any;
+          }
+        }
+        this.updateClusterLayer();
+      })
+    );
   }
 
   ngAfterViewInit() {
@@ -518,7 +540,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
 
   onClusterInfo(cluster: Cluster) {
     this.selectCluster(cluster);
-    this.router.navigate([`${this.moduleService.currentModule.module_path}/cluster`, cluster.id, 'details']);
+    this.router.navigate([`${this.moduleService.currentModule.module_path}/cluster`, cluster.id, 'info', 'details']);
   }
 
   onDeleteCluster(cluster: Cluster) {
@@ -843,33 +865,44 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   onAssociateObservations(obsIds: number[], preselectedClusterId?: number) {
+    // Get the current cluster ID if only one observation is selected (to show as currently associated)
     let currentClusterId: number | null = null;
     if (obsIds.length === 1) {
       const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsIds[0]);
       currentClusterId = obs?.cluster_id ?? null;
     }
 
+    // Collect all unique taxon codes from selected observations
+    // This is used to filter available clusters to compatible taxa
     const cdNomsSet = new Set<number>();
     for (const obsId of obsIds) {
       const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
       if (obs?.cd_nom) cdNomsSet.add(obs.cd_nom);
     }
 
+    // Load compatible clusters for the selected observations' taxa
     this.clustersDataService.listClusters(Array.from(cdNomsSet), 'U').subscribe((fc) => {
       const clusters = (fc.features || []).map((f) => f.properties as Cluster);
+      
+      // Open association modal to let user select target cluster or create new one
       const modalRef = this.modalService.open(ClustersAssociateModalComponent, { size: 'lg' });
       modalRef.componentInstance.clusters = clusters;
       modalRef.componentInstance.observationIds = obsIds;
       modalRef.componentInstance.currentClusterId = currentClusterId;
       modalRef.componentInstance.preselectedClusterId = preselectedClusterId ?? null;
       modalRef.componentInstance.createCluster = () => this.onCreateCluster(obsIds);
+      
+      // Handle modal result (user selection)
       modalRef.result.then(
         (result: { clusterId: number | null; obsIds: number[] }) => {
+          // Build requests to add/remove observations from clusters
           const requests = result.obsIds
             .map((obsId) => {
               if (result.clusterId != null) {
+                // Add observation to selected cluster
                 return this.clustersDataService.addObservation(result.clusterId, obsId);
               }
+              // Remove observation from its current cluster (if any)
               const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
               if (obs?.cluster_id != null) {
                 return this.clustersDataService.removeObservation(obs.cluster_id, obsId);
@@ -877,8 +910,11 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
               return null;
             })
             .filter(Boolean);
+          
+          // Execute all requests in parallel
           forkJoin(requests).subscribe({
             next: () => {
+              // Update local data on success
               for (const obsId of result.obsIds) {
                 const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
                 if (obs) {
@@ -890,9 +926,49 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
                 result.clusterId == null ? 'retirée(s) du foyer' : 'associée(s) au foyer';
               this.toasterService.success(`${result.obsIds.length} observation(s) ${suffix}`);
             },
+            error: (error) => {
+              // Handle conflict error: observation is outside cluster geometry bounds
+              if (error.status === 409 && error.error?.reason === 'obs_outside_cluster_geom') {
+                // Open conflict modal to let user decide: extend cluster geometry or cancel
+                const conflictModalRef = this.modalService.open(ClustersAssociateObsConflictModalComponent);
+                conflictModalRef.result.then(
+                  (conflictResult) => {
+                    if (conflictResult === 'extend' && result.clusterId != null) {
+                      // User chose to extend cluster geometry - retry with extends_cluster option
+                      const requestsWithExtend = result.obsIds
+                        .map((obsId) => {
+                          return this.clustersDataService.addObservation(result.clusterId, obsId, { extendsCluster: true });
+                        })
+                        .filter(Boolean);
+                      
+                      // Execute requests with geometry extension
+                      forkJoin(requestsWithExtend).subscribe({
+                        next: () => {
+                          // Update local data on success
+                          for (const obsId of result.obsIds) {
+                            const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsId);
+                            if (obs) {
+                              obs.cluster_id = result.clusterId;
+                            }
+                          }
+                          this.mapListService.tableData = [...this.mapListService.tableData];
+                          this.toasterService.success(`${result.obsIds.length} observation(s) associée(s) au foyer (étendu)`);
+                        },
+                      });
+                    }
+                    // If user chose not to extend, do nothing (cancel)
+                  },
+                  () => {
+                    // Modal dismissed without action
+                  }
+                );
+              }
+            },
           });
         },
-        () => {}
+        () => {
+          // Association modal dismissed without selection
+        }
       );
     });
   }
@@ -931,16 +1007,55 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     }
   }
 
+  /**
+   * Initialize cluster creation form with optional observation context
+   * If called with a single observation, pre-populates the form with:
+   * - Taxon code from the observation
+   * - Buffered geometry around the observation location as starting point
+   */
   onCreateCluster(obsIds?: number[]) {
+    // Store observation IDs to associate after cluster creation
     this.pendingObsIdsForCreation = obsIds || null;
+    let predrawnGeometry: GeoJSON.Geometry | null = null;
+    
+    // If called with a single observation, try to pre-populate cluster with buffered geometry
     if (obsIds && obsIds.length > 0 && obsIds.length === 1) {
       const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsIds[0]);
       if (obs?.cd_nom) {
-        this.enterDrawingMode(obs.cd_nom);
+        // Find the observation's geometry from the GeoJSON feature collection
+        let geometry: GeoJSON.Geometry | null = null;
+        
+        const geoJsonData = this.mapListService.geojsonData as GeoJSON.FeatureCollection | undefined;
+        if (geoJsonData?.features) {
+          const feature = geoJsonData.features.find((f: any) => {
+            return f.properties?.observations?.id_synthese?.includes(obsIds[0]);
+          });
+          if (feature?.geometry) {
+            geometry = feature.geometry;
+          }
+        }
+        
+        // If geometry found, buffer it to create a pre-drawn cluster geometry
+        // This gives the user a starting point for the cluster boundary
+        if (geometry) {
+          try {
+            const bufferSize = this.config?.CLUSTERS?.OBS_BUFFER_SIZE ?? 15;
+            const geoJsonFeature = { type: 'Feature' as const, geometry: geometry, properties: {} };
+            // Buffer the observation point/geometry by the configured buffer size (in meters)
+            const bufferedFeature = buffer(geoJsonFeature, bufferSize, { units: 'meters', steps: 2 });
+            predrawnGeometry = bufferedFeature.geometry;
+          } catch (error) {
+            console.error('Error buffering observation geometry:', error);
+            // Fall back to no pre-drawn geometry if buffering fails
+          }
+        }
+        // Set the taxon code and pre-drawn geometry for the form
+        this.enterDrawingMode(obs.cd_nom, predrawnGeometry);
         return;
       }
     }
-    this.enterDrawingMode();
+    // If no observation or multiple observations, start with empty form
+    this.enterDrawingMode(undefined, predrawnGeometry);
   }
 
   onObsSelectionChange(ids: number[]) {
@@ -975,23 +1090,71 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.isSearchBarReduced = !this.isSearchBarReduced;
   }
 
-  enterDrawingMode(cdNom?: number) {
+  /**
+   * Enter cluster creation/drawing mode
+   * Sets up the form and map for creating a new cluster
+   * @param cdNom Optional taxon code to pre-populate the form
+   * @param predrawnGeometry Optional pre-drawn geometry (e.g., from buffered observation)
+   */
+  enterDrawingMode(cdNom?: number, predrawnGeometry?: GeoJSON.Geometry) {
+    // Switch to creation mode and hide search bar
     this.clusterCreationMode = true;
     this.editingCluster = null;
     this.isSearchBarReduced = true;
     this.activeTab = 'clusters';
-    this.drawnGeometry = null;
-    this.creationForm.reset();
+    this.drawnGeometry = predrawnGeometry || null;
+    
+    // Reset form only if no pre-drawn geometry, to avoid losing it
+    if (!predrawnGeometry) {
+      this.creationForm.reset();
+    }
+    
+    // Initialize form with current user as manager and optional geometry
     this.creationForm.patchValue({
+      geometry: predrawnGeometry || null,
       properties: {
         manager_id: Number(this.authService.getCurrentUser().id_role),
       },
     });
+    
+    // Update geometry form control and mark as valid since it's either provided or will be drawn
+    const geometryControl = this.creationForm.get('geometry');
+    if (geometryControl) {
+      geometryControl.setValue(predrawnGeometry, { emitEvent: true });
+      geometryControl.markAsTouched();
+      geometryControl.markAsDirty();
+      geometryControl.updateValueAndValidity();
+    }
+    this.creationForm.updateValueAndValidity();
+    
+    // If pre-drawn geometry provided, render it on the map as starting point
+    if (predrawnGeometry) {
+      this._ms.leafletDrawFeatureGroup.clearLayers();
+      const layer = L.geoJSON(predrawnGeometry);
+      layer.eachLayer((l: any) => {
+        this._ms.leafletDrawFeatureGroup.addLayer(l);
+      });
+      // Note: Don't call setGeojsonCoord for pre-drawn geometry as it causes form validation issues
+    }
+    
+    // If taxon code provided, load and set the full taxon object
     if (cdNom) {
       this._dfService.getTaxonInfo(cdNom).subscribe((taxon) => {
         this.creationForm.patchValue({ properties: { cd_nom: taxon } });
+        // Ensure form validity is updated after taxon is loaded
+        const geometryControl = this.creationForm.get('geometry');
+        const propertiesGroup = this.creationForm.get('properties');
+        if (geometryControl) {
+          geometryControl.updateValueAndValidity();
+        }
+        if (propertiesGroup) {
+          propertiesGroup.updateValueAndValidity();
+        }
+        this.creationForm.updateValueAndValidity();
       });
     }
+    
+    // Enable map drawing interaction
     this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
   }
 
@@ -1082,17 +1245,17 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       });
     } else {
       this.clustersDataService.createCluster(value).subscribe({
-        next: (data) => {
+        next: (feature: GeoJSON.Feature) => {
           this.waiting = false;
           this.toasterService.success('Foyer créé');
           if (this.pendingObsIdsForCreation && this.pendingObsIdsForCreation.length > 0) {
             const obsIds = this.pendingObsIdsForCreation;
+            const clusterId = (feature.properties as Cluster).id;
             this.pendingObsIdsForCreation = null;
-            this.clusters = [...this.clusters, data as Cluster];
-            this.updateClusterLayer();
+            this.loadClusters();
             this.exitFormMode();
             this.router.navigateByUrl(moduleUrl);
-            this.onAssociateObservations(obsIds, data.id);
+            this.onAssociateObservations(obsIds, clusterId);
           } else {
             this.loadClusters();
             this.exitFormMode();

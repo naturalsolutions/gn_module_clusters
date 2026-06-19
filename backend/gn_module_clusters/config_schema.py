@@ -30,3 +30,5 @@ class ClustersConfigSchema(Schema):
     OBSERVATIONS_LIMIT_PDF = fields.Integer(load_default=500)
     # Gotenberg service for HTML to PDF conversion
     GOTENBERG_URL = fields.String(load_default="http://localhost:3000")
+    # Buffer size in meters applied to the observation geometry when extending a cluster
+    OBS_BUFFER_SIZE = fields.Integer(load_default=15)

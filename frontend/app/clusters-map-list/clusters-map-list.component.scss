@@ -94,6 +94,7 @@ a[data-toggle='collapse'] {
 .right-panel {
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .tab-scrollable {

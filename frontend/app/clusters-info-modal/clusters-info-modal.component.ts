@@ -1,9 +1,11 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { NgbActiveModal, NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { Router } from '@angular/router';
+import { NgbActiveModal, NgbModal, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
 import { SyntheseInfoObsComponent } from '@geonature/shared/syntheseSharedModule/synthese-info-obs/synthese-info-obs.component';
 import { Cluster, Intervention, InterventionStatus, formatSurface, getManagerName, getTaxonName } from '../models';
 import { ClustersDataService } from '../services/clusters-data.service';
+import { ModuleService } from '@geonature/services/module.service';
 import { saveAs } from 'file-saver';
 
 @Component({
@@ -15,6 +17,8 @@ export class ClustersInfoModalComponent implements OnInit {
   @Input() clusterId: number;
   @Input() canAddObs = false;
   @Input() onCreateObs: () => void = () => { };
+  @Input() tab = 'details';
+  @Input() openObsId?: number;
   cluster: Cluster;
   loading = true;
   exporting = false;
@@ -23,19 +27,26 @@ export class ClustersInfoModalComponent implements OnInit {
   editingIntervention: Intervention | null = null;
   saving = false;
   formData: any = {};
+  activeTab = 'details';
 
   constructor(
     public activeModal: NgbActiveModal,
     private modalService: NgbModal,
     private toastrService: ToastrService,
-    private clustersDataService: ClustersDataService
+    private clustersDataService: ClustersDataService,
+    private router: Router,
+    private moduleService: ModuleService,
   ) { }
 
   ngOnInit() {
+    this.activeTab = this.tab || 'details';
     if (this.clusterId) {
       this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
         this.cluster = feature.properties as Cluster;
         this.loading = false;
+        if (this.openObsId) {
+          setTimeout(() => this.viewObs(this.openObsId));
+        }
         this.clustersDataService
           .getInterventionStatuses(this.cluster.cd_nom)
           .subscribe((statuses) => {
@@ -45,6 +56,13 @@ export class ClustersInfoModalComponent implements OnInit {
     } else {
       this.loading = false;
     }
+  }
+
+  onNavChange(event: NgbNavChangeEvent) {
+    const baseUrl = `/${this.moduleService.currentModule.module_path}`;
+    this.router.navigate([`${baseUrl}/cluster/${this.clusterId}/info/${event.nextId}`], {
+      replaceUrl: true,
+    });
   }
 
   getTaxonName(cluster: Cluster): string {

@@ -82,6 +82,7 @@ export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges
   @Input() inputSyntheseData: GeoJSON;
   @Input() drawEnabled = true;
   @Input() isClusterFormMode = false;
+  @Input() skipFitBounds = false;
   public checkedObsIds: Set<number> = new Set();
 
   constructor(
@@ -138,7 +139,7 @@ export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges
       );
       this.cluserOrSimpleFeatureGroup.addLayer(geojsonLayer);
       this._ms.map.addLayer(this.cluserOrSimpleFeatureGroup);
-      if (changes.inputSyntheseData.previousValue !== undefined) {
+      if (changes.inputSyntheseData.previousValue !== undefined && !this.skipFitBounds) {
         try {
           this._ms.map.fitBounds(this.cluserOrSimpleFeatureGroup.getBounds());
         } catch (error) {}

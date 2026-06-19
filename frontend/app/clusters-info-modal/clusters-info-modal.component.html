@@ -4,8 +4,8 @@
 </div>
 <div class="modal-body">
   <ng-container *ngIf="!loading; else loadingTpl">
-    <ul ngbNav #nav="ngbNav" class="nav-tabs" [destroyOnHide]="false">
-      <li ngbNavItem>
+    <ul ngbNav #nav="ngbNav" class="nav-tabs" [destroyOnHide]="false" [(activeId)]="activeTab" (navChange)="onNavChange($event)">
+      <li [ngbNavItem]="'details'">
         <a ngbNavLink>Détails</a>
         <ng-template ngbNavContent>
           <dl class="row mb-0 mt-2">
@@ -35,7 +35,7 @@
           </dl>
         </ng-template>
       </li>
-      <li ngbNavItem>
+      <li [ngbNavItem]="'observations'">
         <a ngbNavLink>Observations</a>
         <ng-template ngbNavContent>
           <div class="mt-2">
@@ -95,7 +95,7 @@
           </div>
         </ng-template>
       </li>
-      <li ngbNavItem>
+      <li [ngbNavItem]="'interventions'">
         <a ngbNavLink>Interventions</a>
         <ng-template ngbNavContent>
           <div class="mt-2">

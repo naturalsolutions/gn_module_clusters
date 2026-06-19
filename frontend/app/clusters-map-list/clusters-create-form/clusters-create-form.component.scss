@@ -1,6 +1,14 @@
 :host {
   display: block;
   border-top: 1px solid #dee2e6;
-  margin-top: 10px;
   padding: 10px 15px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+  z-index: 100;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
 }
