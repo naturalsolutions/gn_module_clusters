@@ -3,6 +3,15 @@ import { Taxon } from '@geonature_common/form/taxonomy/taxonomy.component';
 import { Cruved } from '@geonature/modules/imports/models/cruved.model';
 
 // API response shape
+export interface SyntheseObservation {
+  id_synthese: number;
+  date_min?: string;
+  nom_cite?: string;
+  observers?: string;
+  place_name?: string;
+  cd_nom?: number;
+}
+
 export interface Cluster {
   id?: number;
   name: string;
@@ -25,6 +34,7 @@ export interface Cluster {
   bbox?: string;
   cruved?: Cruved;
   interventions?: Intervention[];
+  observations?: SyntheseObservation[];
 }
 
 export interface InterventionStatus {

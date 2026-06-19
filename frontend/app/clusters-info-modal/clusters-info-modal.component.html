@@ -36,6 +36,66 @@
         </ng-template>
       </li>
       <li ngbNavItem>
+        <a ngbNavLink>Observations</a>
+        <ng-template ngbNavContent>
+          <div class="mt-2">
+            <div class="d-flex justify-content-end align-items-center mb-2">
+              <button
+                *ngIf="canAddObs"
+                type="button"
+                class="btn btn-sm btn-outline-success"
+                (click)="onCreateObs()">
+                Ajouter une observation
+              </button>
+            </div>
+            <ngx-datatable
+              class="material striped margin-top-xs table-size"
+              [rows]="cluster.observations"
+              [columnMode]="'force'"
+              [headerHeight]="50"
+              [reorderable]="true"
+              [sorts]="[{ prop: 'id_synthese', dir: 'desc' }]"
+            >
+              <ngx-datatable-column [maxWidth]="50" [sortable]="false">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  <i
+                    class="fa fa-info-circle link-dark"
+                    style="cursor: pointer"
+                    (click)="viewObs(row.id_synthese); $event.stopPropagation()"
+                    matTooltip="Détails de l'observation"
+                  ></i>
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="#" prop="id_synthese" [maxWidth]="60" [sortable]="true">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.id_synthese }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Date" prop="date_min" [maxWidth]="120" [sortable]="true">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ (row.date_min | date:'dd/MM/yyyy') || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Taxon" [sortable]="true" [flexGrow]="2">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.nom_cite || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Observateur" [sortable]="true" [flexGrow]="1">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.observers || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+              <ngx-datatable-column name="Lieu" [sortable]="true" [flexGrow]="1">
+                <ng-template let-row="row" ngx-datatable-cell-template>
+                  {{ row.place_name || '-' }}
+                </ng-template>
+              </ngx-datatable-column>
+            </ngx-datatable>
+          </div>
+        </ng-template>
+      </li>
+      <li ngbNavItem>
         <a ngbNavLink>Interventions</a>
         <ng-template ngbNavContent>
           <div class="mt-2">
@@ -142,7 +202,6 @@
   </ng-template>
 </div>
 <div class="modal-footer">
-  <button *ngIf="canAddObs" type="button" class="btn btn-outline-success" (click)="onCreateObs()">Ajouter une observation</button>
   <button *ngIf="cluster?.cruved?.E" type="button" class="btn btn-outline-info" (click)="exportPdf()" [disabled]="exporting">Exporter en PDF</button>
   <button *ngIf="cluster?.cruved?.U" type="button" class="btn btn-outline-primary" (click)="edit()">Modifier</button>
   <button type="button" class="btn btn-secondary" (click)="activeModal.dismiss()">Fermer</button>

@@ -1012,26 +1012,25 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.drawnGeometry = null;
     this.creationForm.reset();
     this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
-    this.clustersDataService.getCluster(cluster.id).subscribe((feature) => {
-      if (feature.geometry) {
-        this.drawnGeometry = feature.geometry;
-        this._ms.leafletDrawFeatureGroup.clearLayers();
-        const layer = L.geoJSON(feature.geometry);
-        layer.eachLayer((l: any) => this._ms.leafletDrawFeatureGroup.addLayer(l));
-        this._ms.setGeojsonCoord(feature.geometry);
-      }
-      const c = feature.properties as any;
-      this.creationForm.patchValue({
-        geometry: feature.geometry || null,
-        properties: {
-          name: c.name,
-          notes: c.notes || null,
-          cd_nom: c.taxref || { cd_nom: c.cd_nom },
-          status_id: c.status_id,
-          yearly_state_id: c.yearly_state_id,
-          manager_id: c.manager_id,
-        },
-      });
+    const feature = this.clusterFC?.features?.find((f) => f.properties?.id === cluster.id);
+    if (feature?.geometry) {
+      this.drawnGeometry = feature.geometry;
+      this._ms.leafletDrawFeatureGroup.clearLayers();
+      const layer = L.geoJSON(feature.geometry);
+      layer.eachLayer((l: any) => this._ms.leafletDrawFeatureGroup.addLayer(l));
+      this._ms.setGeojsonCoord(feature.geometry);
+    }
+    const c = cluster;
+    this.creationForm.patchValue({
+      geometry: feature?.geometry || null,
+      properties: {
+        name: c.name,
+        notes: c.notes || null,
+        cd_nom: c.taxref || { cd_nom: c.cd_nom },
+        status_id: c.status_id,
+        yearly_state_id: c.yearly_state_id,
+        manager_id: c.manager_id,
+      },
     });
   }
 

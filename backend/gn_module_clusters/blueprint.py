@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Blueprint, request, g, jsonify, current_app, render_template
 from flask_login import current_user
 import sqlalchemy as sa
-from sqlalchemy.orm import undefer
+from sqlalchemy.orm import undefer, selectinload, joinedload
 from utils_flask_sqla_geo.utils import geojsonify
 from marshmallow import ValidationError
 from werkzeug.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServiceUnavailable
@@ -87,7 +87,14 @@ def check_cluster_name(cluster):
 def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
         as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    only += ["manager", "taxref", "status", "yearly_state", "+cruved", "+interventions_count"]
+    only += [
+        "manager",
+        "taxref",
+        "status",
+        "yearly_state",
+        "+cruved",
+        "+interventions_count",
+    ]
     if request.args.get("observations_count"):
         only += ["+observations_count"]
     data = ClusterSchema(only=only, as_geojson=as_geojson).dump(*args, **kwargs)
@@ -205,11 +212,26 @@ def create_cluster(scope):
 )
 def get_cluster(id_cluster, scope):
     as_geojson = request.accept_mimetypes.best == "application/geo+json"
-    stmt = (
-        sa.select(Cluster)
-        .where(Cluster.id == id_cluster)
-        .options(undefer(Cluster.surface), undefer(Cluster.bbox))
-    )
+    stmt = sa.select(Cluster).where(Cluster.id == id_cluster)
+    only = []
+
+    if request.args.get("surface", type=bool, default=False):
+        stmt = stmt.options(undefer(Cluster.surface))
+        only.append("+surface")
+    if request.args.get("bbox", type=bool, default=False):
+        stmt = stmt.options(undefer(Cluster.bbox))
+        only.append("+bbox")
+    if request.args.get("interventions", type=bool, default=False):
+        stmt = stmt.options(selectinload(Cluster.interventions).joinedload(Intervention.status))
+        only += ["+interventions", "+interventions.status"]
+    if request.args.get("observations", type=bool, default=False):
+        stmt = stmt.options(
+            selectinload(Cluster.associated_observations).joinedload(
+                ObservarationCluster.observation
+            )
+        )
+        only.append("+observations")
+
     if as_geojson:
         stmt = stmt.options(undefer(Cluster.geom_4326))
     cluster = db.session.execute(stmt).scalar_one_or_none()
@@ -217,11 +239,7 @@ def get_cluster(id_cluster, scope):
         raise NotFound
     if not cluster.has_instance_permission(scope):
         raise Forbidden
-    return dump(
-        cluster,
-        as_geojson=as_geojson,
-        only=["+surface", "+bbox", "+notes", "+interventions", "+interventions.status"],
-    )
+    return dump(cluster, as_geojson=as_geojson, only=only)
 
 
 @blueprint.route(rule="/<int:id_cluster>", methods=["POST"])

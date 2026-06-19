@@ -266,7 +266,10 @@ class TestClusters:
 
     def test_get_cluster_properties(self, users, clusters):
         set_logged_user(self.client, users["self_user"])
-        r = self.client.get(url_for("clusters.get_cluster", id_cluster=clusters["c1"].id))
+        r = self.client.get(
+            url_for("clusters.get_cluster", id_cluster=clusters["c1"].id),
+            query_string={"surface": 1, "bbox": 1, "notes": 1, "interventions": 1},
+        )
         assert r.status_code == 200, r.data
         assert "surface" in r.json, r.data
         assert "bbox" in r.json, r.data
@@ -853,6 +856,17 @@ class TestClustersObservations:
         id_roles = [user["id_role"] for user in r.json]
         assert users["self_user"].id_role in id_roles, r.json
         assert users["stranger_user"].id_role in id_roles, r.json
+
+    def test_get_cluster_observations(self, users, clusters, synthese_data):
+        set_logged_user(self.client, users["admin_user"])
+        r = self.client.get(
+            url_for("clusters.get_cluster", id_cluster=clusters["c4"].id),
+            query_string={"observations": 1},
+        )
+        assert r.status_code == 200, r.data
+        assert "observations" in r.json, r.data
+        assert len(r.json["observations"]) == 1, r.data
+        assert r.json["observations"][0]["id_synthese"] == synthese_data["obs2"].id_synthese, r.data
 
     def test_cluster_observation_add(
         self,

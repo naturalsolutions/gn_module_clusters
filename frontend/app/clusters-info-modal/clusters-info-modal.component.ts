@@ -1,6 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
+import { SyntheseInfoObsComponent } from '@geonature/shared/syntheseSharedModule/synthese-info-obs/synthese-info-obs.component';
 import { Cluster, Intervention, InterventionStatus, formatSurface, getManagerName, getTaxonName } from '../models';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { saveAs } from 'file-saver';
@@ -25,6 +26,7 @@ export class ClustersInfoModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    private modalService: NgbModal,
     private toastrService: ToastrService,
     private clustersDataService: ClustersDataService
   ) { }
@@ -59,6 +61,17 @@ export class ClustersInfoModalComponent implements OnInit {
 
   edit() {
     this.activeModal.close('edit');
+  }
+
+  viewObs(idSynthese: number) {
+    const modalRef = this.modalService.open(SyntheseInfoObsComponent, {
+      size: 'lg',
+      windowClass: 'large-modal',
+    });
+    modalRef.componentInstance.idSynthese = idSynthese;
+    modalRef.componentInstance.selectedTab = 'details';
+    modalRef.componentInstance.useFrom = 'clusters';
+    modalRef.componentInstance.header = true;
   }
 
   exportPdf() {
@@ -98,9 +111,9 @@ export class ClustersInfoModalComponent implements OnInit {
     this.clustersDataService.deleteIntervention(this.cluster.id, intervention.id).subscribe({
       next: () => {
         this.toastrService.success('Intervention supprimée');
-        this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
-          this.cluster = feature.properties as Cluster;
-        });
+        this.cluster.interventions = this.cluster.interventions.filter(
+          (i) => i.id !== intervention.id
+        );
       },
     });
   }
@@ -128,13 +141,18 @@ export class ClustersInfoModalComponent implements OnInit {
       : this.clustersDataService.createIntervention(this.cluster.id, data);
 
     request.subscribe({
-      next: () => {
+      next: (intervention) => {
         this.saving = false;
         this.showForm = false;
         this.editingIntervention = null;
-        this.clustersDataService.getCluster(this.clusterId).subscribe((feature) => {
-          this.cluster = feature.properties as Cluster;
-        });
+        if (intervention) {
+          const idx = this.cluster.interventions.findIndex((i) => i.id === intervention.id);
+          if (idx >= 0) {
+            this.cluster.interventions[idx] = intervention;
+          } else {
+            this.cluster.interventions.push(intervention);
+          }
+        }
       },
       error: () => {
         this.saving = false;

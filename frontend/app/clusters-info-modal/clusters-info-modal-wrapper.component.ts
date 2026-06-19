@@ -6,6 +6,7 @@ import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
 import { ClustersStoreService } from '../services/store.service';
+import { ClustersDataService } from '../services/clusters-data.service';
 import { ClustersInfoModalComponent } from './clusters-info-modal.component';
 
 @Component({
@@ -23,6 +24,7 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
     private moduleService: ModuleService,
     private storeService: ClustersStoreService,
     private config: ConfigService,
+    private clustersDataService: ClustersDataService,
     route: ActivatedRoute
   ) {
     this.moduleUrl = `/${this.moduleService.currentModule.module_path}`;
@@ -73,9 +75,7 @@ export class ClustersInfoModalWrapperComponent implements OnDestroy {
             if (modal.cluster?.cd_nom) {
               queryParams.cd_nom = modal.cluster.cd_nom;
             }
-            if (modal.cluster?.bbox) {
-              queryParams.bbox = modal.cluster.bbox;
-            }
+            queryParams.geojson = this.clustersDataService.getClusterUrl(clusterId);
 
             this.router.navigate([`/${addObsModulePath}`], { queryParams });
           } else {

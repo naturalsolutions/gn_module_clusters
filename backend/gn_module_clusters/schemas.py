@@ -15,6 +15,8 @@ from apptax.taxonomie.schemas import TaxrefSchema, TaxrefTreeSchema
 from gn_module_clusters import MODULE_CODE
 from gn_module_clusters.models import Cluster, Intervention, InterventionStatus
 
+from geonature.core.gn_synthese.schemas import SyntheseSchema
+
 
 class ClusterConverter(NomenclaturesConverter, GeoModelConverter):
     pass
@@ -41,8 +43,8 @@ class ClusterSchema(CruvedSchemaMixin, SmartRelationshipsMixin, GeoAlchemyAutoSc
     interventions_count = fields.Integer(dump_only=True)
     surface = fields.Float(dump_only=True)
     bbox = fields.String(dump_only=True)
-    notes = auto_field(metadata={"exclude": True})
     interventions = Nested("InterventionSchema", many=True, dump_only=True)
+    observations = Nested(SyntheseSchema, many=True, dump_only=True)
 
     @validates_schema
     def check_geom(self, data, **kwargs):

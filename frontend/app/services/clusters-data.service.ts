@@ -31,9 +31,19 @@ export class ClustersDataService {
     });
   }
 
-  getCluster(id: number): Observable<GeoJSON.Feature> {
-    return this._http.get<GeoJSON.Feature>(`${this.CLUSTERS_API}/${id}`, {
+  getClusterUrl(id: number): string {
+    return `${this.CLUSTERS_API}/${id}`;
+  }
+
+  getCluster(id: number, include?: { surface?: boolean; bbox?: boolean; interventions?: boolean; observations?: boolean }): Observable<GeoJSON.Feature> {
+    let params = new HttpParams();
+    if (include?.surface !== false) params = params.set('surface', '1');
+    if (include?.bbox) params = params.set('bbox', '1');
+    if (include?.interventions !== false) params = params.set('interventions', '1');
+    if (include?.observations !== false) params = params.set('observations', '1');
+    return this._http.get<GeoJSON.Feature>(this.getClusterUrl(id), {
       headers: GEOJSON_ACCEPT,
+      params,
     });
   }
 
