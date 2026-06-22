@@ -28,7 +28,6 @@ L.Map.addInitHook('addHandler', 'gestureHandling', GestureHandling);
     'clusters-obs-map.component.scss',
     '../../../node_modules/leaflet-gesture-handling/dist/leaflet-gesture-handling.css',
   ],
-  encapsulation: ViewEncapsulation.None,
   providers: [],
 })
 export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges, OnDestroy {
