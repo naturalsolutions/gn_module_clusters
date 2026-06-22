@@ -166,9 +166,13 @@ export class ClustersInfoModalComponent implements OnInit {
         if (intervention) {
           const idx = this.cluster.interventions.findIndex((i) => i.id === intervention.id);
           if (idx >= 0) {
-            this.cluster.interventions[idx] = intervention;
+            this.cluster.interventions = [
+              ...this.cluster.interventions.slice(0, idx),
+              intervention,
+              ...this.cluster.interventions.slice(idx + 1),
+            ];
           } else {
-            this.cluster.interventions.push(intervention);
+            this.cluster.interventions = [...this.cluster.interventions, intervention];
           }
         }
       },
