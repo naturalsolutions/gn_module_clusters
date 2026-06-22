@@ -883,7 +883,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     // Load compatible clusters for the selected observations' taxa
     this.clustersDataService.listClusters(Array.from(cdNomsSet), 'U').subscribe((fc) => {
       const clusters = (fc.features || []).map((f) => f.properties as Cluster);
-      
+
       // Open association modal to let user select target cluster or create new one
       const modalRef = this.modalService.open(ClustersAssociateModalComponent, { size: 'lg' });
       modalRef.componentInstance.clusters = clusters;
@@ -891,7 +891,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       modalRef.componentInstance.currentClusterId = currentClusterId;
       modalRef.componentInstance.preselectedClusterId = preselectedClusterId ?? null;
       modalRef.componentInstance.createCluster = () => this.onCreateCluster(obsIds);
-      
+
       // Handle modal result (user selection)
       modalRef.result.then(
         (result: { clusterId: number | null; obsIds: number[] }) => {
@@ -910,7 +910,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
               return null;
             })
             .filter(Boolean);
-          
+
           // Execute all requests in parallel
           forkJoin(requests).subscribe({
             next: () => {
@@ -940,7 +940,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
                           return this.clustersDataService.addObservation(result.clusterId, obsId, { extendsCluster: true });
                         })
                         .filter(Boolean);
-                      
+
                       // Execute requests with geometry extension
                       forkJoin(requestsWithExtend).subscribe({
                         next: () => {
@@ -1017,14 +1017,14 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     // Store observation IDs to associate after cluster creation
     this.pendingObsIdsForCreation = obsIds || null;
     let predrawnGeometry: GeoJSON.Geometry | null = null;
-    
+
     // If called with a single observation, try to pre-populate cluster with buffered geometry
     if (obsIds && obsIds.length > 0 && obsIds.length === 1) {
       const obs = this.mapListService.tableData.find((o) => o.id_synthese === obsIds[0]);
       if (obs?.cd_nom) {
         // Find the observation's geometry from the GeoJSON feature collection
         let geometry: GeoJSON.Geometry | null = null;
-        
+
         const geoJsonData = this.mapListService.geojsonData as GeoJSON.FeatureCollection | undefined;
         if (geoJsonData?.features) {
           const feature = geoJsonData.features.find((f: any) => {
@@ -1034,7 +1034,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
             geometry = feature.geometry;
           }
         }
-        
+
         // If geometry found, buffer it to create a pre-drawn cluster geometry
         // This gives the user a starting point for the cluster boundary
         if (geometry) {
@@ -1103,12 +1103,12 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.isSearchBarReduced = true;
     this.activeTab = 'clusters';
     this.drawnGeometry = predrawnGeometry || null;
-    
+
     // Reset form only if no pre-drawn geometry, to avoid losing it
     if (!predrawnGeometry) {
       this.creationForm.reset();
     }
-    
+
     // Determine default manager:
     // - Current user if they are in the allowed list
     // - The only available user if the list has exactly one entry
@@ -1129,7 +1129,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         manager_id: defaultManagerId,
       },
     });
-    
+
     // Update geometry form control and mark as valid since it's either provided or will be drawn
     const geometryControl = this.creationForm.get('geometry');
     if (geometryControl) {
@@ -1139,7 +1139,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       geometryControl.updateValueAndValidity();
     }
     this.creationForm.updateValueAndValidity();
-    
+
     // If pre-drawn geometry provided, render it on the map as starting point
     if (predrawnGeometry) {
       this._ms.leafletDrawFeatureGroup.clearLayers();
@@ -1149,7 +1149,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       });
       // Note: Don't call setGeojsonCoord for pre-drawn geometry as it causes form validation issues
     }
-    
+
     // If taxon code provided, load and set the full taxon object
     if (cdNom) {
       this._dfService.getTaxonInfo(cdNom).subscribe((taxon) => {
@@ -1166,7 +1166,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         this.creationForm.updateValueAndValidity();
       });
     }
-    
+
     // Enable map drawing interaction
     this._ms.map.on((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
   }
