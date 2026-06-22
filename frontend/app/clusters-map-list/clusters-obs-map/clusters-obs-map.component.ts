@@ -6,6 +6,7 @@ import {
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  ViewEncapsulation,
 } from '@angular/core';
 import { GeoJSON } from 'leaflet';
 import { MapListService } from '@geonature_common/map-list/map-list.service';
@@ -16,11 +17,18 @@ import { CommonService } from '@geonature_common/service/common.service';
 import * as L from 'leaflet';
 import { ConfigService } from '@geonature/services/config.service';
 import { ObservationLayerService } from '../../services/observation-layer.service';
+import GestureHandling from 'leaflet-gesture-handling';
+
+L.Map.addInitHook('addHandler', 'gestureHandling', GestureHandling);
 
 @Component({
   selector: 'pnx-clusters-obs-map',
   templateUrl: 'clusters-obs-map.component.html',
-  styleUrls: ['clusters-obs-map.component.scss'],
+  styleUrls: [
+    'clusters-obs-map.component.scss',
+    '../../../node_modules/leaflet-gesture-handling/dist/leaflet-gesture-handling.css',
+  ],
+  encapsulation: ViewEncapsulation.None,
   providers: [],
 })
 export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges, OnDestroy {
@@ -156,6 +164,13 @@ export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges
   }
 
   ngAfterViewInit() {
+    setTimeout(() => {
+      if (!this._ms.map) return;
+      if (window.innerWidth < 768) {
+        (this._ms.map as any).gestureHandling.enable();
+      }
+    });
+
     this.mapListService.onTableClick$.subscribe((id) => {
       const selectedLayers = this.layersDict[id];
       if (selectedLayers) {
