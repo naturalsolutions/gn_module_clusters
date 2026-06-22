@@ -113,7 +113,7 @@ export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes.isClusterFormMode) {
-    this.leafletDrawOptions.draw.circle = !this.isClusterFormMode;
+      this.leafletDrawOptions.draw.circle = !this.isClusterFormMode;
       setTimeout(() => {
         const circles = document.querySelectorAll('.leaflet-draw-draw-circle');
         circles.forEach((el: HTMLElement) => {
@@ -149,12 +149,12 @@ export class ClustersObsMapComponent implements OnInit, AfterViewInit, OnChanges
       if (changes.inputSyntheseData.previousValue !== undefined && !this.skipFitBounds) {
         try {
           this._ms.map.fitBounds(this.cluserOrSimpleFeatureGroup.getBounds());
-        } catch (error) {}
+        } catch (error) { }
       }
     }
   }
 
-  ngOnDestroy() {}
+  ngOnDestroy() { }
 
   public bringObservationsToFront() {
     if (this.cluserOrSimpleFeatureGroup) {

@@ -2,7 +2,8 @@
   #table
   class="material striped margin-top-xs table-size"
   [rows]="clusters"
-  [columnMode]="'force'"
+  [columnMode]="'standard'"
+  [scrollbarH]="true"
   [headerHeight]="50"
   [rowClass]="getRowClass"
   [selected]="selectedRows"
@@ -11,11 +12,8 @@
   (activate)="onRowClick($event)"
 >
   <ngx-datatable-column
-    [width]="100"
-    [maxWidth]="100"
-    [flexGrow]="0"
     [sortable]="false"
-    name=""
+    [maxWidth]="90"
   >
     <ng-template
       let-row="row"
