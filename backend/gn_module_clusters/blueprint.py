@@ -411,30 +411,39 @@ def list_observations(permissions):
     action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
 )
 def list_roles(scope):
+    def get_groups_whereclause(*filters):
+        """
+        Build a where clause to fetch groups, limited by filters:
+          - exclude those in MANAGER_EXCLUDED_GROUPS_IDS
+          - additional filters provided in argument of this functions
+        """
+        groups_ands = [
+            User.groupe.is_(True),
+            *filters,
+        ]
+        if blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]:
+            groups_ands.append(
+                sa.not_(User.id_role.in_(blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]))
+            )
+        return sa.and_(*groups_ands)
+
     # Return roles that the current_user can set as manager on its clusters
     # Please make sure this function is consistant with Cluster.filter_by_scope / Cluster.has_instance_permission
     if scope == 0:
         raise Forbidden
     if scope in [1, 2]:
         ors = []  # available managers
-        if not blueprint.config["MANAGER_GROUP_ONLY"]:
+        if not blueprint.config["MANAGER_GROUP_ONLY"]:  # The user it-self
             ors.append(User.id_role == current_user.id_role)
-        # Groups of the curren_user:
-        groups_ands = [
-            User.groupe.is_(True),
-            User.members.any(User.id_role == current_user.id_role),
-        ]
-        if blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]:
-            groups_ands.append(
-                sa.not_(User.id_role.in_(blueprint.config["MANAGER_EXCLUDED_GROUPS_IDS"]))
-            )
-        ors.append(sa.and_(*groups_ands))
+        # Groups of the current user:
+        ors.append(get_groups_whereclause(User.members.any(User.id_role == current_user.id_role)))
         if scope == 2 and current_user.id_organisme is not None:
+            # The users with same organism as the user
             ors.append(User.id_organisme == current_user.id_organisme)
         where_clause = sa.or_(*ors)
     elif scope == 3:
         if blueprint.config["MANAGER_GROUP_ONLY"]:
-            where_clause = User.groupe.is_(True)
+            where_clause = get_groups_whereclause()
         else:
             where_clause = sa.true()
     users = db.session.scalars(sa.select(User).where(where_clause)).all()

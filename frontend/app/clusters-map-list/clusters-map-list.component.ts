@@ -254,7 +254,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         cd_nom: [null, Validators.required],
         status_id: null,
         yearly_state_id: null,
-        manager_id: null,
+        manager_id: [null, Validators.required],
       }),
     });
   }
@@ -1109,11 +1109,24 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       this.creationForm.reset();
     }
     
-    // Initialize form with current user as manager and optional geometry
+    // Determine default manager:
+    // - Current user if they are in the allowed list
+    // - The only available user if the list has exactly one entry
+    // - Otherwise leave unset
+    const currentUserId = Number(this.authService.getCurrentUser().id_role);
+    const currentUserInList = this.users.some((u) => Number(u.id_role) === currentUserId);
+    let defaultManagerId = null;
+    if (currentUserInList) {
+      defaultManagerId = currentUserId;
+    } else if (this.users.length === 1) {
+      defaultManagerId = Number(this.users[0].id_role);
+    }
+
+    // Initialize form with derived manager and optional geometry
     this.creationForm.patchValue({
       geometry: predrawnGeometry || null,
       properties: {
-        manager_id: Number(this.authService.getCurrentUser().id_role),
+        manager_id: defaultManagerId,
       },
     });
     
