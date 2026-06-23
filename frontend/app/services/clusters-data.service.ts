@@ -82,7 +82,7 @@ export class ClustersDataService {
   }
 
   getRoles(): Observable<any[]> {
-    return this._http.post<any[]>(`${this.CLUSTERS_API}/roles`, null);
+    return this._http.get<any[]>(`${this.CLUSTERS_API}/roles`);
   }
 
   listObservations(filters: any, selectors: HttpParams): Observable<any> {

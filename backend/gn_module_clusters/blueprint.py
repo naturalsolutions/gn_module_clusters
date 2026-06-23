@@ -31,7 +31,7 @@ from geonature.core.gn_synthese.models import Synthese
 from geonature.core.gn_synthese.schemas import SyntheseSchema
 
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
-from pypnusershub.db.models import User
+from pypnusershub.db.models import User, cor_roles
 from pypnusershub.schemas import UserSchema
 from apptax.taxonomie.models import TaxrefTree
 
@@ -406,7 +406,7 @@ def list_observations(permissions):
     return unprotected_view_function(permissions=permissions)
 
 
-@blueprint.route(rule="/roles", methods=["POST"])
+@blueprint.route(rule="/roles", methods=["GET"])
 @check_cruved_scope(
     action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
 )
@@ -414,8 +414,8 @@ def list_roles(scope):
     def get_groups_whereclause(*filters):
         """
         Build a where clause to fetch groups, limited by filters:
-          - exclude those in MANAGER_EXCLUDED_GROUPS_IDS
-          - additional filters provided in argument of this functions
+        - exclude those in MANAGER_EXCLUDED_GROUPS_IDS
+        - additional filters provided in argument of this functions
         """
         groups_ands = [
             User.groupe.is_(True),
@@ -436,7 +436,12 @@ def list_roles(scope):
         if not blueprint.config["MANAGER_GROUP_ONLY"]:  # The user it-self
             ors.append(User.id_role == current_user.id_role)
         # Groups of the current user:
-        ors.append(get_groups_whereclause(User.members.any(User.id_role == current_user.id_role)))
+        current_user_groups = User.id_role.in_(
+            sa.select(cor_roles.c.id_role_groupe).where(
+                cor_roles.c.id_role_utilisateur == current_user.id_role,
+            )
+        )
+        ors.append(get_groups_whereclause(current_user_groups))
         if scope == 2 and current_user.id_organisme is not None:
             # The users with same organism as the user
             ors.append(User.id_organisme == current_user.id_organisme)
@@ -446,6 +451,8 @@ def list_roles(scope):
             where_clause = get_groups_whereclause()
         else:
             where_clause = sa.true()
+    else:
+        raise RuntimeError(f"Unexpected scope: {scope}")
     users = db.session.scalars(sa.select(User).where(where_clause)).all()
     return UserSchema().dump(users, many=True)
 

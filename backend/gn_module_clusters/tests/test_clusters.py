@@ -855,28 +855,28 @@ class TestClustersClusters:
 class TestClustersRoles:
     def test_list_roles(self, users):
         url = url_for(endpoint="clusters.list_roles")
-        r = self.client.post(url)
+        r = self.client.get(url)
         assert r.status_code == Unauthorized.code, r.data
 
         set_logged_user(self.client, users["noright_user"])
-        r = self.client.post(url)
+        r = self.client.get(url)
         assert r.status_code == Forbidden.code, r.data
 
         set_logged_user(self.client, users["self_user"])
-        r = self.client.post(url)
+        r = self.client.get(url)
         assert r.status_code == 200, r.data
         assert len(r.json) == 1, r.json
         assert r.json[0]["id_role"] == users["self_user"].id_role, r.json
 
         set_logged_user(self.client, users["associate_user"])
-        r = self.client.post(url)
+        r = self.client.get(url)
         assert r.status_code == 200, r.data
         id_roles = [user["id_role"] for user in r.json]
         assert users["self_user"].id_role in id_roles, r.json
         assert users["stranger_user"].id_role not in id_roles, r.json
 
         set_logged_user(self.client, users["admin_user"])
-        r = self.client.post(url)
+        r = self.client.get(url)
         assert r.status_code == 200, r.data
         id_roles = [user["id_role"] for user in r.json]
         assert users["self_user"].id_role in id_roles, r.json
