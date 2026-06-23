@@ -12,6 +12,7 @@ from geonature.core.gn_synthese.models import Synthese
 
 from pypnusershub.db.models import User
 from apptax.taxonomie.models import Taxref, TaxrefTree
+from ref_geo.models import LAreas
 from ref_geo.utils import get_local_srid
 
 from gn_module_clusters import SCHEMA
@@ -88,7 +89,7 @@ class Cluster(db.Model):
             .scalar_subquery()
         )
 
-    def has_instance_permission(self, scope, *, user=None):
+    def _has_scope_grant(self, scope, *, user=None):
         if user is None:
             user = g.current_user
         if scope == 0:
@@ -103,6 +104,38 @@ class Cluster(db.Model):
             )
         elif scope == 3:
             return True
+
+    def _has_permissions_grant(self, permissions, *, user=None):
+        if not permissions:
+            return False
+        for perm in permissions:
+            if perm.has_other_filters_than("SCOPE", "GEOGRAPHIC", "TAXONOMIC"):
+                continue  # unsupported filters
+            if perm.scope_value:
+                if not self._has_scope_grant(perm.scope_value):
+                    continue  # scope filter denied access, check next permission
+            if perm.areas_filter:
+                if not db.session.scalar(
+                    sa.select(
+                        sa.exists().where(
+                            LAreas.id_area.in_([a.id_area for a in perm.areas_filter]),
+                            sa.func.ST_Within(self.geom_4326, LAreas.geom_4326),
+                        )
+                    )
+                ):
+                    continue
+            if perm.taxons_filter:
+                # at least one taxon filter should be a parent of the cluster taxon
+                if not any([self.taxref.tree < taxon.cd_nom for taxon in perm.taxons_filter]):
+                    continue
+            return True  # no filter exclude this permission
+        return False
+
+    def has_instance_permission(self, permissions, **kwargs):
+        if type(permissions) is int:
+            return self._has_scope_grant(permissions, **kwargs)
+        else:
+            return self._has_permissions_grant(permissions, **kwargs)
 
     @classmethod
     def filter_by_scope(cls, scope, *, user=None):

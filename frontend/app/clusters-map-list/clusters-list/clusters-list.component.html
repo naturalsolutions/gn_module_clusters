@@ -5,6 +5,9 @@
   [columnMode]="'standard'"
   [scrollbarH]="true"
   [headerHeight]="50"
+  [footerHeight]="50"
+  [count]="clusters.length"
+  [limit]="rowNumber"
   [rowClass]="getRowClass"
   [selected]="selectedRows"
   [selectionType]="'single'"
@@ -87,7 +90,7 @@
       ngx-datatable-cell-template
     >
       <a
-        class="link-primary"
+        style="color:#673ab7"
         (click)="onTaxonClick(row); $event.stopPropagation()"
         matTooltip="Filtrer avec ce taxon"
       >

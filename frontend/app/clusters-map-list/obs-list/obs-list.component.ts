@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges, HostListener } from '@angular/core';
 import { DatatableComponent } from '@swimlane/ngx-datatable';
 import { Cluster } from '../../models';
 
@@ -13,6 +13,7 @@ export class ObsListComponent implements OnChanges {
   @Input() selectedObsIds: Set<number> = new Set();
   @Input() selectedObsRowId: number | null = null;
   @Input() visible: boolean = false;
+  @Input() canUpdateCluster: boolean = false;
 
   @Output() taxonClick = new EventEmitter<number>();
   @Output() associateObservations = new EventEmitter<number[]>();
@@ -23,10 +24,27 @@ export class ObsListComponent implements OnChanges {
   @ViewChild('table', { static: true }) table: DatatableComponent;
 
   selectedIds: Set<number> = new Set();
+  rowNumber: number;
+
+  constructor() {
+    this.setRowNumber();
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    this.rowNumber = Math.trunc(event.target.innerHeight / 37);
+  }
+
+  private setRowNumber() {
+    this.rowNumber = Math.trunc(document.documentElement.clientHeight * 0.86 / 37);
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['visible']?.currentValue === true) {
       setTimeout(() => this.table.recalculate(), 0);
+    }
+    if (changes['observations']) {
+      this.table.offset = 0;
     }
   }
 
@@ -95,6 +113,11 @@ export class ObsListComponent implements OnChanges {
     if (event.type === 'click') {
       this.selectObsOnMap.emit(event.row.id_synthese);
     }
+  }
+
+  getCluster(clusterId: number): Cluster | undefined {
+    if (clusterId == null) return undefined;
+    return this.clusters.find((c) => c.id === clusterId);
   }
 
   getClusterName(clusterId: number): string {

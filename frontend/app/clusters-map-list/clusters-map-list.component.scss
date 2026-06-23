@@ -66,27 +66,6 @@ a[data-toggle='collapse'] {
   position: relative;
 }
 
-:host ::ng-deep .clusters-orphan-filter {
-  background-color: rgba(255, 255, 255, 0.8);
-}
-:host ::ng-deep .clusters-orphan-filter .custom-control-label {
-  margin: 0.2rem;
-}
-:host ::ng-deep .clusters-orphan-filter .custom-control-label::before {
-  top: 0.05rem;
-}
-:host ::ng-deep .clusters-orphan-filter .custom-control-label::after {
-  top: calc(0.05rem + 2px);
-}
-:host ::ng-deep .clusters-orphan-filter .custom-control-input:indeterminate ~ .custom-control-label::before {
-  background-color: #ffc107;
-  border-color: #ffc107;
-}
-:host ::ng-deep .clusters-orphan-filter .custom-control-input:indeterminate ~ .custom-control-label::after {
-  background-color: #fff;
-  transform: translateX(0.5rem);
-}
-
 .nav-link {
   cursor: pointer;
 }
@@ -186,49 +165,75 @@ a[data-toggle='collapse'] {
 
 :host ::ng-deep .clusters-mode-control {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
   background-color: rgba(255, 255, 255, 0.8);
-  padding: 3px 6px;
+  padding: 6px 8px;
   border-radius: 2px;
   box-shadow: none !important;
+  font-size: 0.8rem;
 }
 
-:host ::ng-deep .clusters-mode-control .btn-group {
+:host ::ng-deep .clusters-mode-row {
   display: flex;
-}
-
-:host ::ng-deep .clusters-mode-btn {
-  line-height: 1.4;
-  font-size: inherit;
-  color: inherit;
-  box-shadow: none !important;
-}
-
-:host ::ng-deep .clusters-mode-btn:not(:first-child) {
-  border-left: none;
-  margin-left: 0;
-}
-
-:host ::ng-deep .clusters-mode-btn:hover {
-  background-color: #e9ecef;
-}
-
-:host ::ng-deep .clusters-mode-control .clusters-mode-btn.active {
-  background-color: #007bff;
-  border-color: #007bff;
-  color: #fff;
-  box-shadow: none !important;
-}
-
-:host ::ng-deep .clusters-mode-control .clusters-mode-btn:focus {
-  box-shadow: none !important;
+  align-items: center;
+  gap: 6px;
 }
 
 :host ::ng-deep .clusters-mode-label {
-  font-weight: 500;
   white-space: nowrap;
-  margin-left: 2px;
+}
+
+:host ::ng-deep .clusters-mode-toggle {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+
+:host ::ng-deep .clusters-mode-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+:host ::ng-deep .toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: #ccc;
+  border-radius: 18px;
+  transition: 0.3s;
+}
+
+:host ::ng-deep .toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+:host ::ng-deep .clusters-mode-toggle input:checked + .toggle-slider {
+  background-color: #007bff;
+}
+
+:host ::ng-deep .clusters-mode-toggle input:checked + .toggle-slider::before {
+  transform: translateX(12px);
+}
+
+:host ::ng-deep .toggle-slider.indeterminate {
+  background-color: #ffc107;
+}
+
+:host ::ng-deep .toggle-slider.indeterminate::before {
+  transform: translateX(6px);
+  background-color: #fff;
 }
 
 

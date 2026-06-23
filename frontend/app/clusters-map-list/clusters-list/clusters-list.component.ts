@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, OnInit, Input, Output, EventEmitter, ViewChild, OnChanges, SimpleChanges, HostListener } from '@angular/core';
 import { DatatableComponent } from '@swimlane/ngx-datatable';
 import { Cluster, getTaxonName } from '../../models';
 import { ClustersDataService } from '../../services/clusters-data.service';
@@ -22,15 +22,31 @@ export class ClustersListComponent implements OnInit, OnChanges {
   @Output() deleteCluster = new EventEmitter<Cluster>();
   @ViewChild('table', { static: true }) table: DatatableComponent;
 
+  rowNumber: number;
+
   constructor(
     private clustersDataService: ClustersDataService
-  ) {}
+  ) {
+    this.setRowNumber();
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    this.rowNumber = Math.trunc(event.target.innerHeight / 37);
+  }
+
+  private setRowNumber() {
+    this.rowNumber = Math.trunc(document.documentElement.clientHeight * 0.86 / 37);
+  }
 
   ngOnInit() {}
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['visible']?.currentValue === true) {
       setTimeout(() => this.table.recalculate(), 0);
+    }
+    if (changes['clusters']) {
+      this.table.offset = 0;
     }
   }
 

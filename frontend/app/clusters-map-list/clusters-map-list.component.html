@@ -114,6 +114,7 @@
             [selectedObsIds]="selectedObsIds"
             [selectedObsRowId]="selectedObsRowId"
             [visible]="activeTab === 'observations'"
+            [canUpdateCluster]="canUpdateCluster"
             (selectedIdsChange)="onObsSelectionChange($event)"
             (associateObservations)="onAssociateObservations($event)"
             (openInfoObs)="openInfoModal($event)"
@@ -225,6 +226,7 @@
           ></pnx-clusters-list>
           <div class="actions-btns">
             <button
+              *ngIf="canCreateCluster"
               mat-raised-button
               color="primary"
               class="btn-action uppercase"

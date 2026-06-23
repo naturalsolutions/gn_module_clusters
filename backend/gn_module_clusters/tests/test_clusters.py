@@ -851,7 +851,7 @@ class TestClustersClusters:
         )
 
 
-@pytest.mark.usefixtures("client_class", "temporary_transaction")
+@pytest.mark.usefixtures("client_class", "temporary_transaction", "test_config")
 class TestClustersRoles:
     def test_list_roles(self, users):
         url = url_for(endpoint="clusters.list_roles")
@@ -940,7 +940,7 @@ class TestClustersObservations:
 
         # But we can change cluster of an obs if we have rights on the other cluster too
         r = self.client.post(url("c1", "obs2"))
-        assert r.status_code == 204, r.data
+        assert r.status_code == 200, r.data
         db.session.refresh(synthese_data["obs4"])
         assert synthese_data["obs2"].cluster == clusters["c1"]  # changed
 
@@ -977,7 +977,7 @@ class TestClustersObservations:
         )
 
         r = self.client.post(url)
-        assert r.status_code == 204, r.data
+        assert r.status_code == 200, r.data
 
         with db.session.begin_nested():
             cluster_module = db.session.scalars(
@@ -986,7 +986,7 @@ class TestClustersObservations:
             datasets["own_dataset"].modules.append(cluster_module)
 
         r = self.client.post(url)
-        assert r.status_code == 204, r.data
+        assert r.status_code == 200, r.data
         assert synthese_data["obs2"].cluster == clusters["c1"]
 
     def test_cluster_observation_add_dataset(
@@ -1022,7 +1022,7 @@ class TestClustersObservations:
             datasets["own_dataset"].modules.append(cluster_module)
 
         r = self.client.post(url)
-        assert r.status_code == 204, r.data
+        assert r.status_code == 200, r.data
 
     def test_cluster_observation_add_valid_status(
         self,
@@ -1058,7 +1058,7 @@ class TestClustersObservations:
         monkeypatch.setitem(current_app.config["CLUSTERS"], "VALID_STATUS", ["1", "2"])
 
         r = self.client.post(url)
-        assert r.status_code == 204, r.data
+        assert r.status_code == 200, r.data
         db.session.refresh(synthese_data["obs2"])
         assert synthese_data["obs2"].cluster == clusters["c1"]
 

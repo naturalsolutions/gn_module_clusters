@@ -14,6 +14,7 @@ import { ToastrService } from 'ngx-toastr';
 import { AuthService } from '@geonature/components/auth/auth.service';
 import { ConfigService } from '@geonature/services/config.service';
 import { ModuleService } from '@geonature/services/module.service';
+import { CruvedStoreService } from '@geonature_common/service/cruved-store.service';
 import { MapListService } from '@geonature_common/map-list/map-list.service';
 import { MapService } from '@geonature_common/map/map.service';
 import { SyntheseFormService } from '@geonature_common/form/synthese-form/synthese-form.service';
@@ -48,8 +49,11 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public clusterFilter: null | number[] = [];
   public includeOrphanObs = true;
   private pendingSelectClusterId: number | null = null;
-  public clusterDisplayMode: 'hidden' | 'modifiable' | 'all' = 'modifiable';
+  public clustersVisible = true;
+  public alsoNonEditableData = true;
   public addObsModulePath: string | null = null;
+  public canCreateCluster = false;
+  public canUpdateCluster = false;
   public selectedObsForActions: number[] = [];
   public checkedObsSet: Set<number> = new Set();
   public clusterCreationMode = false;
@@ -74,7 +78,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private get clusterActionParam(): string {
-    return this.clusterDisplayMode === 'modifiable' ? 'U' : 'R';
+    return this.alsoNonEditableData ? 'R' : 'U';
   }
 
   get observationCountLabel(): string {
@@ -214,6 +218,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   private clusterFeatureGroup: L.FeatureGroup;
   private subscriptions: Subscription[] = [];
   private _withClusterInput: HTMLInputElement | null = null;
+  private _withClusterSlider: HTMLElement | null = null;
   private clusterDefaultStyle = {
     color: '#FF8C00',
     weight: 3,
@@ -243,7 +248,8 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     private _ms: MapService,
     private _fb: UntypedFormBuilder,
     private _dfService: DataFormService,
-    private authService: AuthService
+    private authService: AuthService,
+    private cruvedStore: CruvedStoreService
   ) {
     this.clusterFeatureGroup = new L.FeatureGroup();
     this.creationForm = this._fb.group({
@@ -285,7 +291,12 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
       this.applyDefaultFormValues(params);
     });
 
-    this.clustersDataService.getRoles().subscribe((data) => this.users = data);
+    const clustersCruved = this.cruvedStore.cruved?.CLUSTERS?.module_objects?.CLUSTERS_CLUSTERS?.cruved;
+    this.canCreateCluster = Number(clustersCruved?.C ?? 0) > 0;
+    this.canUpdateCluster = Number(clustersCruved?.U ?? 0) > 0;
+    if (this.canUpdateCluster) {
+      this.alsoNonEditableData = false;
+    }
 
     this.loadClusters();
 
@@ -375,9 +386,10 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     if (this._ms.map) {
       this._ms.map.addLayer(this.clusterFeatureGroup);
       this.obsMap?.bringObservationsToFront();
-      this.addClustersModeControl();
-      this.addObsWithoutClusterSwitch();
-      this.addObsWithClusterSwitch();
+      this.addObservationControls();
+      if (this.canUpdateCluster) {
+        this.addNonEditableDataControl();
+      }
       this.addMapLegend();
     }
   }
@@ -395,7 +407,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   private loadClusters() {
     this.clusterFeatureGroup.clearLayers();
 
-    if (this.clusterDisplayMode === 'hidden') {
+    if (!this.clustersVisible) {
       this.clusterFC = null;
       this.clusters = [];
       this.clustersLoaded = true;
@@ -423,11 +435,6 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         this.clusterFC = null;
         this.clusters = [];
         this.clustersLoaded = true;
-        if (action === 'U') {
-          this.toasterService.warning(
-            'Vous n\'avez pas les droits de modification sur les foyers'
-          );
-        }
       },
     });
   }
@@ -645,7 +652,11 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.obsLoaded = false;
     this.formService.searchForm.markAsPristine();
 
-    this.clustersDataService.listObservations(formParams, this.formService.selectors).subscribe(
+    const obs$ = this.alsoNonEditableData
+      ? this.clustersDataService.listObservationsSynthese(formParams, this.formService.selectors)
+      : this.clustersDataService.listObservations(formParams, this.formService.selectors);
+
+    obs$.subscribe(
       (data) => {
         this.parseGeoJson(data);
         this.obsLoaded = true;
@@ -739,108 +750,99 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.loadData();
   }
 
-  private addObsWithoutClusterSwitch() {
-    const OrphanFilterControl = L.Control.extend({
-      options: { position: 'topright' },
-      onAdd: () => {
-        const container = L.DomUtil.create(
-          'div',
-          'leaflet-bar custom-control custom-switch leaflet-control-custom clusters-orphan-filter'
-        );
-        const input = L.DomUtil.create('input', 'custom-control-input', container);
-        input.id = 'toggle-orphan-filter-btn';
-        input.type = 'checkbox';
-        input.checked = this.includeOrphanObs;
-        input.onclick = () => {
-          this.includeOrphanObs = input.checked;
-          this.onSearchEvent();
-        };
-        const label = L.DomUtil.create('label', 'custom-control-label', container);
-        label.setAttribute('for', 'toggle-orphan-filter-btn');
-        label.innerText = 'Observations sans foyer';
-        return container;
-      },
-    });
-    this._ms.map.addControl(new OrphanFilterControl());
-  }
-
-  private addObsWithClusterSwitch() {
-    const WithClusterControl = L.Control.extend({
-      options: { position: 'topright' },
-      onAdd: () => {
-        const container = L.DomUtil.create(
-          'div',
-          'leaflet-bar custom-control custom-switch leaflet-control-custom clusters-orphan-filter'
-        );
-        const input = L.DomUtil.create('input', 'custom-control-input', container);
-        input.id = 'toggle-with-cluster-btn';
-        input.type = 'checkbox';
-        this._withClusterInput = input;
-        this.updateWithClusterSwitch();
-        input.onclick = () => {
-          if (Array.isArray(this.clusterFilter) && this.clusterFilter.length > 0) {
-            this.clusterFilter = [];
-          } else {
-            this.clusterFilter = input.checked ? null : [];
-          }
-          this.updateWithClusterSwitch();
-          this.onSearchEvent();
-        };
-        const label = L.DomUtil.create('label', 'custom-control-label', container);
-        label.setAttribute('for', 'toggle-with-cluster-btn');
-        label.innerText = 'Observations avec foyer';
-        return container;
-      },
-    });
-    this._ms.map.addControl(new WithClusterControl());
-  }
-
-  public updateWithClusterSwitch() {
-    if (this._withClusterInput) {
-      this._withClusterInput.checked = this.clusterFilter === null;
-      this._withClusterInput.indeterminate =
-        Array.isArray(this.clusterFilter) && this.clusterFilter.length > 0;
-    }
-  }
-
-  private addClustersModeControl() {
-    const ClusterModeControl = L.Control.extend({
+  private addNonEditableDataControl() {
+    const NonEditableControl = L.Control.extend({
       options: { position: 'topright' },
       onAdd: () => {
         const container = L.DomUtil.create(
           'div',
           'leaflet-bar leaflet-control-custom clusters-mode-control'
         );
-        const btnGroup = L.DomUtil.create('div', 'btn-group btn-group-sm', container);
+        const row = L.DomUtil.create('div', 'clusters-mode-row', container);
+        const toggle = L.DomUtil.create('label', 'clusters-mode-toggle', row);
+        const checkbox = L.DomUtil.create('input', '', toggle);
+        checkbox.type = 'checkbox';
+        checkbox.checked = this.alsoNonEditableData;
+        L.DomUtil.create('span', 'toggle-slider', toggle);
+        const label = L.DomUtil.create('span', 'clusters-mode-label', row);
+        label.innerText = 'Voir les données non modifiable';
+        L.DomEvent.on(checkbox, 'change', () => {
+          this.alsoNonEditableData = checkbox.checked;
+          this.loadClusters();
+          this.onSearchEvent();
+        });
+        return container;
+      },
+    });
+    this._ms.map.addControl(new NonEditableControl());
+  }
 
-        const modes: Array<{ key: 'hidden' | 'modifiable' | 'all'; icon: string; label: string; title: string }> = [
-          { key: 'hidden', icon: 'fa-eye-slash', label: '', title: 'Masquer les foyers' },
-          { key: 'modifiable', icon: 'fa-pencil', label: 'Associable', title: 'Foyers modifiables' },
-          { key: 'all', icon: 'fa-eye', label: '', title: 'Tous les foyers' },
-        ];
+  public updateWithClusterSwitch() {
+    if (this._withClusterInput && this._withClusterSlider) {
+      const hasItems = Array.isArray(this.clusterFilter) && this.clusterFilter.length > 0;
+      this._withClusterInput.checked = this.clusterFilter === null;
+      this._withClusterSlider.classList.toggle('indeterminate', hasItems);
+    }
+  }
 
-        for (const mode of modes) {
-          const btn = L.DomUtil.create('button', 'btn btn-outline-secondary clusters-mode-btn', btnGroup);
-          btn.innerHTML = `<i class="fa ${mode.icon}"></i>${mode.label ? ' ' + mode.label : ''}`;
-          btn.title = mode.title;
-          if (this.clusterDisplayMode === mode.key) {
-            L.DomUtil.addClass(btn, 'active');
+  private addObservationControls() {
+    const ObsControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: () => {
+        const container = L.DomUtil.create(
+          'div',
+          'leaflet-bar leaflet-control-custom clusters-mode-control'
+        );
+
+        const clustersRow = L.DomUtil.create('div', 'clusters-mode-row', container);
+        const clustersToggle = L.DomUtil.create('label', 'clusters-mode-toggle', clustersRow);
+        const clustersCheckbox = L.DomUtil.create('input', '', clustersToggle);
+        clustersCheckbox.type = 'checkbox';
+        clustersCheckbox.checked = this.clustersVisible;
+        L.DomUtil.create('span', 'toggle-slider', clustersToggle);
+        const clustersLabel = L.DomUtil.create('span', 'clusters-mode-label', clustersRow);
+        clustersLabel.innerText = 'Foyers';
+        L.DomEvent.on(clustersCheckbox, 'change', () => {
+          this.clustersVisible = clustersCheckbox.checked;
+          this.loadClusters();
+        });
+
+        const orphanRow = L.DomUtil.create('div', 'clusters-mode-row', container);
+        const orphanToggle = L.DomUtil.create('label', 'clusters-mode-toggle', orphanRow);
+        const orphanCheckbox = L.DomUtil.create('input', '', orphanToggle);
+        orphanCheckbox.type = 'checkbox';
+        orphanCheckbox.checked = this.includeOrphanObs;
+        L.DomUtil.create('span', 'toggle-slider', orphanToggle);
+        const orphanLabel = L.DomUtil.create('span', 'clusters-mode-label', orphanRow);
+        orphanLabel.innerText = 'Observations sans foyer';
+        L.DomEvent.on(orphanCheckbox, 'change', () => {
+          this.includeOrphanObs = orphanCheckbox.checked;
+          this.onSearchEvent();
+        });
+
+        const withClusterRow = L.DomUtil.create('div', 'clusters-mode-row', container);
+        const withClusterToggle = L.DomUtil.create('label', 'clusters-mode-toggle', withClusterRow);
+        const withClusterCheckbox = L.DomUtil.create('input', '', withClusterToggle);
+        withClusterCheckbox.type = 'checkbox';
+        this._withClusterInput = withClusterCheckbox;
+        this._withClusterSlider = L.DomUtil.create('span', 'toggle-slider', withClusterToggle);
+        this.updateWithClusterSwitch();
+        const withClusterLabel = L.DomUtil.create('span', 'clusters-mode-label', withClusterRow);
+        withClusterLabel.innerText = 'Observations avec foyer';
+        L.DomEvent.on(withClusterCheckbox, 'change', () => {
+          if (Array.isArray(this.clusterFilter) && this.clusterFilter.length > 0) {
+            this.clusterFilter = [];
+          } else {
+            this.clusterFilter = withClusterCheckbox.checked ? null : [];
           }
-          L.DomEvent.on(btn, 'click', () => {
-            this.clusterDisplayMode = mode.key;
-            btnGroup.querySelectorAll('.clusters-mode-btn').forEach((b) => b.classList.remove('active'));
-            L.DomUtil.addClass(btn, 'active');
-            this.loadClusters();
-          });
-        }
-
-        const label = L.DomUtil.create('span', 'clusters-mode-label', container);
-        label.innerText = 'Foyers';
+          this.updateWithClusterSwitch();
+          this.onSearchEvent();
+        });
 
         return container;
       },
     });
-    this._ms.map.addControl(new ClusterModeControl());
+    this._ms.map.addControl(new ObsControl());
   }
 
   private addMapLegend() {
@@ -1096,49 +1098,54 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
    * @param cdNom Optional taxon code to pre-populate the form
    * @param predrawnGeometry Optional pre-drawn geometry (e.g., from buffered observation)
    */
+  private _loadRoles(callback: () => void) {
+    if (this.users.length > 0) {
+      callback();
+      return;
+    }
+    this.clustersDataService.getRoles().subscribe((data) => {
+      this.users = data;
+      callback();
+    });
+  }
+
   enterDrawingMode(cdNom?: number, predrawnGeometry?: GeoJSON.Geometry) {
-    // Switch to creation mode and hide search bar
     this.clusterCreationMode = true;
     this.editingCluster = null;
     this.isSearchBarReduced = true;
     this.activeTab = 'clusters';
     this.drawnGeometry = predrawnGeometry || null;
 
-    // Reset form only if no pre-drawn geometry, to avoid losing it
     if (!predrawnGeometry) {
       this.creationForm.reset();
     }
 
-    // Determine default manager:
-    // - Current user if they are in the allowed list
-    // - The only available user if the list has exactly one entry
-    // - Otherwise leave unset
-    const currentUserId = Number(this.authService.getCurrentUser().id_role);
-    const currentUserInList = this.users.some((u) => Number(u.id_role) === currentUserId);
-    let defaultManagerId = null;
-    if (currentUserInList) {
-      defaultManagerId = currentUserId;
-    } else if (this.users.length === 1) {
-      defaultManagerId = Number(this.users[0].id_role);
-    }
+    this._loadRoles(() => {
+      const currentUserId = Number(this.authService.getCurrentUser().id_role);
+      const currentUserInList = this.users.some((u) => Number(u.id_role) === currentUserId);
+      let defaultManagerId = null;
+      if (currentUserInList) {
+        defaultManagerId = currentUserId;
+      } else if (this.users.length === 1) {
+        defaultManagerId = Number(this.users[0].id_role);
+      }
 
-    // Initialize form with derived manager and optional geometry
-    this.creationForm.patchValue({
-      geometry: predrawnGeometry || null,
-      properties: {
-        manager_id: defaultManagerId,
-      },
+      this.creationForm.patchValue({
+        geometry: predrawnGeometry || null,
+        properties: {
+          manager_id: defaultManagerId,
+        },
+      });
+
+      const geometryControl = this.creationForm.get('geometry');
+      if (geometryControl) {
+        geometryControl.setValue(predrawnGeometry, { emitEvent: true });
+        geometryControl.markAsTouched();
+        geometryControl.markAsDirty();
+        geometryControl.updateValueAndValidity();
+      }
+      this.creationForm.updateValueAndValidity();
     });
-
-    // Update geometry form control and mark as valid since it's either provided or will be drawn
-    const geometryControl = this.creationForm.get('geometry');
-    if (geometryControl) {
-      geometryControl.setValue(predrawnGeometry, { emitEvent: true });
-      geometryControl.markAsTouched();
-      geometryControl.markAsDirty();
-      geometryControl.updateValueAndValidity();
-    }
-    this.creationForm.updateValueAndValidity();
 
     // If pre-drawn geometry provided, render it on the map as starting point
     if (predrawnGeometry) {

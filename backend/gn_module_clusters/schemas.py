@@ -16,6 +16,7 @@ from gn_module_clusters import MODULE_CODE
 from gn_module_clusters.models import Cluster, Intervention, InterventionStatus
 
 from geonature.core.gn_synthese.schemas import SyntheseSchema
+from geonature.core.gn_permissions.tools import get_scope, get_permissions
 
 
 class ClusterConverter(NomenclaturesConverter, GeoModelConverter):
@@ -50,6 +51,16 @@ class ClusterSchema(CruvedSchemaMixin, SmartRelationshipsMixin, GeoAlchemyAutoSc
     def check_geom(self, data, **kwargs):
         if "geom" in data and "geom_4326" in data:
             raise ValidationError("Set geom or geom_4326, not both!")
+
+    def get_cruved(self, obj):
+        module_code = self.__module_code__
+        object_code = getattr(self, "__object_code__", None)
+        return {
+            action: obj.has_instance_permission(
+                get_scope(action, module_code=module_code, object_code=object_code)
+            )
+            for action in "RUED"
+        }
 
 
 class InterventionStatusSchema(SmartRelationshipsMixin, GeoAlchemyAutoSchema):

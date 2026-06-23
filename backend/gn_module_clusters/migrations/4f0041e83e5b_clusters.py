@@ -250,8 +250,8 @@ def upgrade():
                     "label": "Créer des foyers d’envahissement",
                     "scope_filter": True,
                     "sensitivity_filter": False,
-                    "areas_filter": False,
-                    "taxons_filter": False,
+                    "areas_filter": True,
+                    "taxons_filter": True,
                 },
                 {
                     "id_module": id_module,

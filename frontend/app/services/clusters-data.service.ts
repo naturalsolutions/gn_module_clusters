@@ -91,6 +91,12 @@ export class ClustersDataService {
     });
   }
 
+  listObservationsSynthese(filters: any, selectors: HttpParams): Observable<any> {
+    return this._http.post<any>(`${this.config.API_ENDPOINT}/synthese/for_web`, filters, {
+      params: selectors,
+    });
+  }
+
   exportPdf(id: number, filters?: any): Observable<Blob> {
     return this._http.post(`${this.CLUSTERS_API}/${id}/export_pdf`, { filters }, {
       responseType: 'blob',

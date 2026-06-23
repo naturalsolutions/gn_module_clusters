@@ -33,7 +33,7 @@ from geonature.core.gn_synthese.schemas import SyntheseSchema
 from pypnnomenclature.models import BibNomenclaturesTypes, TNomenclatures
 from pypnusershub.db.models import User, cor_roles
 from pypnusershub.schemas import UserSchema
-from apptax.taxonomie.models import TaxrefTree
+from apptax.taxonomie.models import Taxref, TaxrefTree
 
 import gn_module_clusters.admin  # noqa: F401
 
@@ -89,12 +89,34 @@ def init(state):
         "validator",
         "validation_comment",
         "cluster_id",
+        "cluster_name",
     ]
+
+    # The synthese is using VSyntheseForWebApp to fetch columns to returns, VSyntheseForWebApp to filter
+    # the query when there are no blurring permissions, and Synthese when there are blurring permissions…
+    # So as we want to filter on cluster_id, we needs to add it to both models…
+
+    Synthese.cluster_id = sa.orm.column_property(
+        sa.select(ObservarationCluster.id_cluster)
+        .where(ObservarationCluster.id_synthese == Synthese.id_synthese)
+        .scalar_subquery(),
+        deferred=True,
+    )
 
     VSyntheseForWebApp.cluster_id = sa.orm.column_property(
         sa.select(ObservarationCluster.id_cluster)
         .where(ObservarationCluster.id_synthese == VSyntheseForWebApp.id_synthese)
-        .scalar_subquery()
+        .scalar_subquery(),
+        deferred=True,
+    )
+    VSyntheseForWebApp.cluster_name = sa.orm.column_property(
+        sa.select(Cluster.name)
+        .where(
+            Cluster.id == ObservarationCluster.id_cluster,
+            ObservarationCluster.id_synthese == VSyntheseForWebApp.id_synthese,
+        )
+        .scalar_subquery(),
+        deferred=True,
     )
 
 
@@ -211,10 +233,8 @@ def list_clusters():
 
 
 @blueprint.route(rule="/", methods=["POST"])
-@check_cruved_scope(
-    action="C", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
-)
-def create_cluster(scope):
+@permissions_required(action="C", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS")
+def create_cluster(permissions):
     as_geojson = request.content_type == "application/geo+json"
     create_schema = ClusterSchema(only=rw_fields, partial=["manager_id"], as_geojson=as_geojson)
     cluster = create_schema.load(request.json, session=db.session)
@@ -224,8 +244,6 @@ def create_cluster(scope):
         cluster.manager = g.current_user
     else:
         cluster.manager = db.get_or_404(User, cluster.manager_id)
-        if not cluster.has_instance_permission(scope):
-            raise Forbidden
 
     # nomenclatures
     if cluster.status_id is not None:
@@ -252,12 +270,17 @@ def create_cluster(scope):
             raise BadRequest(
                 f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
             )
+    if cluster.cd_nom is not None:
+        cluster.taxref = db.get_or_404(Taxref, cluster.cd_nom)
 
     # When geoms are loaded from json, the srid is not necessary set
     if cluster.geom_4326.srid < 0:
         cluster.geom_4326.srid = 4326
     check_cluster_overlap(cluster)
     check_cluster_name(cluster)
+
+    if not cluster.has_instance_permission(permissions):
+        raise Forbidden("Vous n’avez pas les droits à cet emplacement avec ce taxon.")
 
     db.session.add(cluster)
     db.session.commit()
@@ -380,6 +403,11 @@ def update_cluster(id_cluster, scope):
 
             check_cluster_overlap(cluster)
 
+        # Verify the cd_nom & geom fields against C permissions
+        permissions = get_permissions("C", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS")
+        if not cluster.has_instance_permission(permissions):
+            raise Forbidden("Vous n’avez pas les droits sur cet emplacement avec ce taxon.")
+
     db.session.commit()
     return dump(cluster)
 
@@ -417,10 +445,20 @@ def list_observations(permissions):
 
 
 @blueprint.route(rule="/roles", methods=["GET"])
-@check_cruved_scope(
-    action="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
-)
-def list_roles(scope):
+@login_required
+def list_roles():
+    scope = max(
+        get_scope(
+            action_code="C",
+            module_code=MODULE_CODE,
+            object_code="CLUSTERS_CLUSTERS",
+            bypass_warning=True,
+        ),
+        get_scope(action_code="U", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS"),
+    )
+    if not scope:
+        raise Forbidden("You have not rights on clusters.")
+
     def get_groups_whereclause(*filters):
         """
         Build a where clause to fetch groups, limited by filters:
@@ -573,7 +611,7 @@ def cluster_remove_observation(id_cluster, id_observation, scope):
     if not cluster:
         raise NotFound("Cluster not found")
     if not cluster.has_instance_permission(scope):
-        raise Forbidden("You have no rights on any observations")
+        raise Forbidden("You have no rights on this cluster")
     obs_permissions = get_permissions(
         action_code="U",
         module_code=MODULE_CODE,
