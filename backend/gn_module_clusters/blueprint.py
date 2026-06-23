@@ -49,11 +49,13 @@ from gn_module_clusters.schemas import ClusterSchema, InterventionSchema, Interv
 blueprint: Blueprint = Blueprint(name="clusters", import_name=__name__, template_folder="templates")
 
 
-# can be removed after merge of https://github.com/PnX-SI/GeoNature/pull/4195
+# can be removed after merge of:
+# - https://github.com/PnX-SI/GeoNature/pull/4195
+# - https://github.com/PnX-SI/GeoNature/pull/4208
 @blueprint.errorhandler(HTTPException)
 def handle_http_exception(e):
     response = e.get_response()
-    if request.accept_mimetypes.best == "application/json":
+    if request.accept_mimetypes.best_match(["application/json", "text/html"]) == "application/json":
         response.data = json.dumps(
             {
                 "code": e.code,
@@ -65,6 +67,14 @@ def handle_http_exception(e):
         )
         response.content_type = "application/json"
     return response
+
+
+def geojson_preferred():
+    as_geojson = (
+        request.accept_mimetypes.best_match(["application/geo+json", "application/json"])
+        == "application/geo+json"
+    )
+    return as_geojson
 
 
 @blueprint.record_once
@@ -134,7 +144,7 @@ def check_cluster_name(cluster):
 
 def dump(*args, as_geojson=None, only=[], **kwargs):
     if as_geojson is None:
-        as_geojson = "application/geo+json" in request.accept_mimetypes
+        as_geojson = geojson_preferred()
     only += [
         "manager",
         "taxref",
@@ -173,7 +183,7 @@ def list_clusters():
     if scope == 0:
         raise Forbidden
 
-    as_geojson = "application/geo+json" in request.accept_mimetypes
+    as_geojson = geojson_preferred()
     stmt = sa.select(Cluster).where(Cluster.filter_by_scope(scope))
 
     accepted_cd_nom = request.args.get("accepted_cd_nom")
@@ -259,7 +269,7 @@ def create_cluster(scope):
     action="R", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS", get_scope=True
 )
 def get_cluster(id_cluster, scope):
-    as_geojson = "application/geo+json" in request.accept_mimetypes
+    as_geojson = geojson_preferred()
     stmt = sa.select(Cluster).where(Cluster.id == id_cluster)
     only = []
 

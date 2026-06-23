@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { Cluster, ClusterFeature, Intervention } from '../models';
 
 const GEOJSON_CONTENT_TYPE = new HttpHeaders({ 'Content-Type': 'application/geo+json' });
-const GEOJSON_ACCEPT = new HttpHeaders({ 'Accept': 'application/json, application/geo+json' });
+const GEOJSON_ACCEPT = new HttpHeaders({ 'Accept': 'application/geo+json, application/json' });
 
 @Injectable()
 export class ClustersDataService {
