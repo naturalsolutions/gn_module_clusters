@@ -647,6 +647,7 @@ class TestClustersClusters:
         assert clusters["c1"].geom_4326 == clusters["c5"].geom_4326
         assert clusters["c1"].geom != c1_geom  # updated from geom_4326
 
+        pytest.skip(reason="Update of cd_nom have been disabled")
         # update with same cd_nom as c5 (now same geom) → Conflict
         r = self.client.post(
             url_for(endpoint="clusters.update_cluster", id_cluster=clusters["c1"].id),
@@ -724,6 +725,7 @@ class TestClustersClusters:
         )
         assert r.status_code == BadRequest.code, r.data
 
+    @pytest.mark.skip(reason="Update of cd_nom have been disabled")
     def test_update_cluster_cd_nom(self, users, clusters, synthese_data):
         set_logged_user(self.client, users["self_user"])
 

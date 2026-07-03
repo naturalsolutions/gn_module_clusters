@@ -184,15 +184,8 @@ def dump(*args, as_geojson=None, only=[], **kwargs):
         return jsonify(data)
 
 
-rw_fields = [
-    "manager_id",
-    "status_id",
-    "yearly_state_id",
-    "name",
-    "notes",
-    "cd_nom",
-    "geom_4326",
-]
+update_fields = ["manager_id", "status_id", "yearly_state_id", "name", "notes", "geom_4326"]
+create_fields = update_fields + ["cd_nom"]
 
 
 @blueprint.route(rule="/", methods=["GET"])
@@ -236,7 +229,7 @@ def list_clusters():
 @permissions_required(action="C", module_code=MODULE_CODE, object_code="CLUSTERS_CLUSTERS")
 def create_cluster(permissions):
     as_geojson = request.content_type == "application/geo+json"
-    create_schema = ClusterSchema(only=rw_fields, partial=["manager_id"], as_geojson=as_geojson)
+    create_schema = ClusterSchema(only=create_fields, partial=["manager_id"], as_geojson=as_geojson)
     cluster = create_schema.load(request.json, session=db.session)
 
     # manager
@@ -337,7 +330,7 @@ def update_cluster(id_cluster, scope):
         raise Forbidden("You do not have access to this cluster.")
 
     as_geojson = request.content_type == "application/geo+json"
-    update_schema = ClusterSchema(only=rw_fields, partial=True, as_geojson=as_geojson)
+    update_schema = ClusterSchema(only=update_fields, partial=True, as_geojson=as_geojson)
 
     # Avoid possible commits before the end of validation checks
     with db.session.no_autoflush:
@@ -374,7 +367,9 @@ def update_cluster(id_cluster, scope):
                 raise BadRequest(
                     f"yearly state nomenclature with id {cluster.yearly_state_id} not found"
                 )
-        if attrs.cd_nom.history.has_changes():
+        if (
+            attrs.cd_nom.history.has_changes()
+        ):  # pragma: no cover - update cd_nom have been disabled
             db.session.expire(cluster, ["taxref"])
             if not cluster.taxref:
                 raise BadRequest(f"taxon with cd_nom {cluster.cd_nom} not found")

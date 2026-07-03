@@ -1214,6 +1214,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
         manager_id: props.manager_id,
       },
     });
+    this.creationForm.get('properties.cd_nom')?.disable();
   }
 
   private _clearGeometryOnDrawStart = () => {
@@ -1228,6 +1229,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
     this.editingCluster = null;
     this.pendingObsIdsForCreation = null;
     this.drawnGeometry = null;
+    this.creationForm.get('properties.cd_nom')?.enable();
     this.creationForm.reset();
     this._ms.map.off((L as any).Draw.Event.DRAWSTART, this._clearGeometryOnDrawStart);
     this._ms.leafletDrawFeatureGroup.clearLayers();
