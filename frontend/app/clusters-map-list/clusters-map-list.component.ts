@@ -1245,6 +1245,10 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   saveCluster() {
+    const saveButton = this._ms.map.getContainer().querySelector('.leaflet-draw-actions a');
+    if (saveButton) {
+      (saveButton as HTMLElement).click();
+    }
     if (this.creationForm.invalid) return;
     this.waiting = true;
     const value = JSON.parse(JSON.stringify(this.creationForm.value));
