@@ -1,8 +1,10 @@
 import { Component, Input, OnInit } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { NgbActiveModal, NgbModal, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrService } from 'ngx-toastr';
 import { SyntheseInfoObsComponent } from '@geonature/shared/syntheseSharedModule/synthese-info-obs/synthese-info-obs.component';
+import { AuthService } from '@geonature/components/auth/auth.service';
 import { Cluster, Intervention, InterventionStatus, formatSurface, getManagerName, getTaxonName } from '../models';
 import { ClustersDataService } from '../services/clusters-data.service';
 import { ModuleService } from '@geonature/services/module.service';
@@ -12,6 +14,7 @@ import { saveAs } from 'file-saver';
   selector: 'pnx-clusters-info-modal',
   templateUrl: './clusters-info-modal.component.html',
   styleUrls: ['./clusters-info-modal.component.scss'],
+  providers: [DatePipe],
 })
 export class ClustersInfoModalComponent implements OnInit {
   @Input() clusterId: number;
@@ -36,6 +39,8 @@ export class ClustersInfoModalComponent implements OnInit {
     private clustersDataService: ClustersDataService,
     private router: Router,
     private moduleService: ModuleService,
+    private authService: AuthService,
+    private datePipe: DatePipe,
   ) { }
 
   ngOnInit() {
@@ -108,7 +113,8 @@ export class ClustersInfoModalComponent implements OnInit {
 
   showAddForm() {
     this.editingIntervention = null;
-    this.formData = { operator_name: '', intervention_date: '', status_id: '', status_custom: '', notes: '' };
+    const currentUser = this.authService.getCurrentUser();
+    this.formData = { operator_name: currentUser?.nom_complet || '', intervention_date: this.datePipe.transform(new Date(), 'yyyy-MM-dd'), status_id: '', status_custom: '', notes: '' };
     this.showForm = true;
   }
 
