@@ -46,7 +46,7 @@ export class ClustersMapListComponent implements OnInit, AfterViewInit, OnDestro
   public selectedObsRowId: number | null = null;
   public obsLoaded = false;
   public clustersLoaded = false;
-  public clusterFilter: null | number[] = [];
+  public clusterFilter: null | number[] = null;
   public includeOrphanObs = true;
   private pendingSelectClusterId: number | null = null;
   public clustersVisible = true;
